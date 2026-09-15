@@ -56,12 +56,30 @@ d'envoyer autre chose.
 - Toute proposition réintroduisant un `playerId` fourni par le client est à
   rejeter sans discussion tant que cet ADR est en vigueur.
 
+## Précision apportée à l'implémentation
+
+Le socle a révélé un angle mort de la formulation initiale. « Le serveur renvoie
+la vue du joueur dont c'est le tour » est **faux en mode `Solo`** : après le tir
+de l'humain, le tour passe au bot, et servir la vue du joueur courant revient à
+publier la flotte du bot dans le navigateur.
+
+La règle exacte est donc : **le serveur ne sert jamais la vue d'un bot.**
+`ViewForClient()` suit le joueur courant s'il est humain, et bascule sur
+l'adversaire humain sinon. En mode `Local`, les deux joueurs étant humains, le
+comportement reste celui décrit plus haut.
+
+La garantie porte sur la frontière HTTP — aucun endpoint n'accepte d'identité de
+joueur — et non sur le type `Game`, dont la méthode `ViewFor(Player)` reste
+accessible au code serveur (le bot s'en sert pour choisir sa cible).
+
 ## Vérification et réexamen
 - Un test du domaine vérifie qu'une `GameView` ne contient **aucune** position
   de navire adverse non découverte.
-- Un test d'intégration vérifie qu'après un tir accepté, le `GET` suivant
-  retourne la vue de l'autre joueur — et donc que la bascule est bien pilotée
-  par le serveur.
+- Un test d'intégration vérifie qu'après un tir accepté en mode `Solo`, le `GET`
+  suivant décrit toujours l'humain et jamais le bot.
+- Contrôle de mutation exécuté : remplacer `ViewForClient()` par la vue du
+  joueur courant fait échouer
+  `ViewForClient_OnceTheBotIsToPlay_StillDescribesTheHuman`.
 - Contrôle de mutation : retirer le filtrage des positions adverses dans la
   projection doit faire échouer le premier test.
 
