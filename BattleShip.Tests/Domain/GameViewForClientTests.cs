@@ -13,6 +13,9 @@ public class GameViewForClientTests
         return new Game(GameMode.Solo, human, bot);
     }
 
+    private static HashSet<Coordinates> FleetOf(Player player) =>
+        [.. player.Board.Ships.SelectMany(ship => ship.Cells)];
+
     [Fact]
     public void ViewForClient_WhileItIsTheHumanTurn_DescribesTheHuman()
     {
@@ -31,7 +34,7 @@ public class GameViewForClientTests
         // joueur courant reviendrait alors a livrer la flotte du bot au
         // navigateur. Voir ADR 0003.
         var game = SoloGameWhereTheHumanOpens();
-        game.Fire(new Coordinates(0, 0));
+        game.FireFromClient(new Coordinates(0, 0));
 
         var view = game.ViewForClient();
 
@@ -40,16 +43,24 @@ public class GameViewForClientTests
     }
 
     [Fact]
-    public void ViewForClient_OnceTheBotIsToPlay_NeverExposesTheBotFleet()
+    public void ViewForClient_OnceTheBotIsToPlay_ServesTheHumanFleetAndNotTheBotOne()
     {
         var game = SoloGameWhereTheHumanOpens();
-        var botCells = game.Opponent.Board.Ships.SelectMany(ship => ship.Cells).ToHashSet();
-        game.Fire(new Coordinates(0, 0));
+        var humanFleet = FleetOf(game.CurrentPlayer);
+        var botFleet = FleetOf(game.Opponent);
 
+        // Les deux flottes occupent des grilles distinctes : partager une
+        // coordonnee n'est pas une fuite. Seul le fait que les deux flottes
+        // different rend les assertions suivantes discriminantes.
+        Assert.False(humanFleet.SetEquals(botFleet), "les deux flottes sont identiques : le test ne prouverait rien");
+
+        game.FireFromClient(new Coordinates(0, 0));
         var view = game.ViewForClient();
 
-        var ownCells = view.OwnFleet.SelectMany(ship => ship.Cells).ToHashSet();
-        Assert.Empty(ownCells.Intersect(botCells.Except(ownCells)));
+        var served = view.OwnFleet.SelectMany(ship => ship.Cells).ToHashSet();
+
+        Assert.True(served.SetEquals(humanFleet), "la vue servie ne decrit pas la flotte de l'humain");
+        Assert.False(served.SetEquals(botFleet), "la vue servie decrit la flotte du bot");
         Assert.All(view.ShotsFired, cell => Assert.Equal(new Coordinates(0, 0), cell.Target));
     }
 
@@ -63,7 +74,7 @@ public class GameViewForClientTests
         var game = new Game(GameMode.Local, first, second);
 
         Assert.Equal("Alice", game.ViewForClient().ViewerName);
-        game.Fire(new Coordinates(0, 0));
+        game.FireFromClient(new Coordinates(0, 0));
         Assert.Equal("Bob", game.ViewForClient().ViewerName);
     }
 }

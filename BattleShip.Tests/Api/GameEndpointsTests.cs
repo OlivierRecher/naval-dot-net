@@ -108,6 +108,22 @@ public class GameEndpointsTests(WebApplicationFactory<Program> factory) : IClass
     }
 
     [Fact]
+    public async Task Fire_WhileItIsTheBotTurn_Returns409AndLeavesTheBotTurnToPlay()
+    {
+        // Sans ce refus, le second POST /shots ferait tirer le bot sur une case
+        // choisie par le client, et consommerait son tour. Voir ADR 0003.
+        var game = await CreateGameAsync();
+        await _client.PostAsJsonAsync($"/games/{game.GameId}/shots", new FireRequest(4, 4));
+
+        var response = await _client.PostAsJsonAsync($"/games/{game.GameId}/shots", new FireRequest(5, 5));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+
+        var botTurn = await _client.PostAsJsonAsync($"/games/{game.GameId}/bot-turn", new { });
+        Assert.Equal(HttpStatusCode.OK, botTurn.StatusCode);
+    }
+
+    [Fact]
     public async Task BotTurn_WhileItIsTheHumanTurn_Returns409()
     {
         var game = await CreateGameAsync();

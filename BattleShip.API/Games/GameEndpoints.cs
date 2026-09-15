@@ -62,12 +62,11 @@ public static class GameEndpoints
             return TypedResults.NotFound();
         }
 
-        var target = new Coordinates(request.Column, request.Row);
-        var outcome = game.Fire(target);
+        var outcome = game.FireFromClient(new Coordinates(request.Column, request.Row));
 
         return outcome.Rejection is { } rejection
             ? Refused(rejection)
-            : TypedResults.Ok(outcome.ToResponse(game, target));
+            : TypedResults.Ok(outcome.ToResponse(game));
     }
 
     private static IResult PlayBotTurn(Guid id, IGameRepository repository, IBotStrategy strategy)
@@ -77,24 +76,11 @@ public static class GameEndpoints
             return TypedResults.NotFound();
         }
 
-        if (game.Status is GameStatus.Finished)
-        {
-            return Refused(FireRejection.GameFinished);
-        }
-
-        if (!game.CurrentPlayer.IsBot)
-        {
-            return TypedResults.Problem(
-                "Ce n'est pas au bot de jouer.",
-                statusCode: StatusCodes.Status409Conflict);
-        }
-
-        var target = strategy.ChooseTarget(game.ViewFor(game.CurrentPlayer), game.Opponent.Board.Size);
-        var outcome = game.Fire(target);
+        var outcome = game.PlayBotTurn(strategy);
 
         return outcome.Rejection is { } rejection
             ? Refused(rejection)
-            : TypedResults.Ok(outcome.ToResponse(game, target));
+            : TypedResults.Ok(outcome.ToResponse(game));
     }
 
     private static IResult Refused(FireRejection rejection) => rejection switch
@@ -109,6 +95,14 @@ public static class GameEndpoints
 
         FireRejection.GameFinished => TypedResults.Problem(
             "La partie est terminée.",
+            statusCode: StatusCodes.Status409Conflict),
+
+        FireRejection.NotTheClientTurn => TypedResults.Problem(
+            "C'est au bot de jouer ; le client ne tire pas à sa place.",
+            statusCode: StatusCodes.Status409Conflict),
+
+        FireRejection.NotTheBotTurn => TypedResults.Problem(
+            "Ce n'est pas au bot de jouer.",
             statusCode: StatusCodes.Status409Conflict),
 
         _ => TypedResults.Problem(statusCode: StatusCodes.Status500InternalServerError)

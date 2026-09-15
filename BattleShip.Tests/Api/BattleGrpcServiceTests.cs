@@ -131,6 +131,31 @@ public class BattleGrpcServiceTests(WebApplicationFactory<Program> factory) : IC
     }
 
     [Fact]
+    public async Task Fire_OverGrpc_WhileItIsTheBotTurn_ReportsFailedPrecondition()
+    {
+        // Le chemin gRPC porte le meme garde que HTTP : le client ne joue pas
+        // le tour du bot, quel que soit le transport. Voir ADR 0003 et 0005.
+        var http = factory.CreateClient();
+        var gameId = await CreateGameAsync(http);
+        var grpc = CreateGrpcClient();
+
+        await grpc.FireAsync(new FireCommand { GameId = gameId.ToString(), Column = 3, Row = 3 });
+
+        var error = await Assert.ThrowsAsync<RpcException>(() =>
+            grpc.FireAsync(new FireCommand
+            {
+                GameId = gameId.ToString(),
+                Column = 4,
+                Row = 4
+            }).ResponseAsync);
+
+        Assert.Equal(StatusCode.FailedPrecondition, error.StatusCode);
+
+        var botTurn = await http.PostAsJsonAsync($"/games/{gameId}/bot-turn", new { });
+        Assert.Equal(HttpStatusCode.OK, botTurn.StatusCode);
+    }
+
+    [Fact]
     public async Task Fire_OverGrpcThenOverHttpOnTheSameCell_IsRefusedByBothTransports()
     {
         // Les deux chemins delegent au meme appel du domaine : une regle

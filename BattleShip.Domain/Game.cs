@@ -14,6 +14,7 @@ public enum GameStatus
 
 public sealed class Game
 {
+    private readonly Lock _gate = new();
     private readonly List<Shot> _shots = [];
     private Player _current;
     private Player _waiting;
@@ -37,9 +38,88 @@ public sealed class Game
 
     public Player? Winner { get; private set; }
 
-    public IReadOnlyList<Shot> Shots => _shots;
+    public IReadOnlyList<Shot> Shots
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _shots];
+            }
+        }
+    }
 
     public FireOutcome Fire(Coordinates target)
+    {
+        lock (_gate)
+        {
+            return FireLocked(target);
+        }
+    }
+
+    /// <summary>
+    /// Tir demande par le navigateur. Le client n'envoie aucune identite : le
+    /// serveur refuse donc de jouer le tour d'un bot a sa place, sinon le
+    /// client choisirait la cible du bot. Voir ADR 0003.
+    /// </summary>
+    public FireOutcome FireFromClient(Coordinates target)
+    {
+        lock (_gate)
+        {
+            if (Status is GameStatus.Finished)
+            {
+                return FireOutcome.Rejected(FireRejection.GameFinished);
+            }
+
+            return _current.IsBot
+                ? FireOutcome.Rejected(FireRejection.NotTheClientTurn)
+                : FireLocked(target);
+        }
+    }
+
+    /// <summary>
+    /// Le choix de la cible et le tir forment une seule transition : les
+    /// separer laisserait deux appels concurrents jouer deux fois le meme tour.
+    /// </summary>
+    public FireOutcome PlayBotTurn(IBotStrategy strategy)
+    {
+        lock (_gate)
+        {
+            if (Status is GameStatus.Finished)
+            {
+                return FireOutcome.Rejected(FireRejection.GameFinished);
+            }
+
+            if (!_current.IsBot)
+            {
+                return FireOutcome.Rejected(FireRejection.NotTheBotTurn);
+            }
+
+            return FireLocked(strategy.ChooseTarget(ViewLocked(_current), _waiting.Board.Size));
+        }
+    }
+
+    /// <summary>
+    /// Projection destinee au navigateur. Un bot n'a pas de client : lui servir
+    /// sa propre vue reviendrait a publier sa flotte. Voir ADR 0003.
+    /// </summary>
+    public GameView ViewForClient()
+    {
+        lock (_gate)
+        {
+            return ViewLocked(_current.IsBot ? _waiting : _current);
+        }
+    }
+
+    public GameView ViewFor(Player viewer)
+    {
+        lock (_gate)
+        {
+            return ViewLocked(viewer);
+        }
+    }
+
+    private FireOutcome FireLocked(Coordinates target)
     {
         if (FireRules.Validate(Status, _waiting.Board, target) is { } rejection)
         {
@@ -54,21 +134,15 @@ public sealed class Game
         {
             Status = GameStatus.Finished;
             Winner = shooter;
-            return FireOutcome.Accepted(result);
+            return FireOutcome.Accepted(target, result);
         }
 
         (_current, _waiting) = (_waiting, _current);
 
-        return FireOutcome.Accepted(result);
+        return FireOutcome.Accepted(target, result);
     }
 
-    /// <summary>
-    /// Projection destinee au navigateur. Un bot n'a pas de client : lui servir
-    /// sa propre vue reviendrait a publier sa flotte. Voir ADR 0003.
-    /// </summary>
-    public GameView ViewForClient() => ViewFor(_current.IsBot ? _waiting : _current);
-
-    public GameView ViewFor(Player viewer)
+    private GameView ViewLocked(Player viewer)
     {
         return new GameView(
             Id,

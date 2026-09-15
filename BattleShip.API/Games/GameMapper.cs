@@ -24,8 +24,8 @@ internal static class GameMapper
         [.. view.ShotsFired.Select(cell => new RevealedCellDto(cell.Target.ToDto(), cell.Result.ToString()))],
         view.WinnerName);
 
-    public static ShotOutcomeResponse ToResponse(this FireOutcome outcome, Game game, Coordinates target) => new(
-        target.ToDto(),
+    public static ShotOutcomeResponse ToResponse(this FireOutcome outcome, Game game) => new(
+        outcome.Target.ToDto(),
         outcome.Result.ToString(),
         game.Status is GameStatus.Finished,
         game.Winner?.Name,

@@ -10,7 +10,13 @@
 
 @if (Session.Failure is not null)
 {
-    <div class="alert alert-danger" role="alert">@Session.Failure</div>
+    <div class="alert alert-danger" role="alert">
+        @Session.Failure
+        @if (Session.CanRetryBotTurn)
+        {
+            <button class="btn btn-sm btn-outline-danger ms-2" @onclick="RetryBotTurnAsync">Relancer le tour du bot</button>
+        }
+    </div>
 }
 
 @if (Session.View is null)
@@ -139,6 +145,8 @@ else
     private async Task StartAsync() => await Session.StartAsync(_playerName, _side);
 
     private async Task FireAsync(CoordinatesDto target) => await Session.FireAsync(target.Column, target.Row);
+
+    private async Task RetryBotTurnAsync() => await Session.RetryBotTurnAsync();
 
     private void Reset()
     {

@@ -29,8 +29,7 @@ public sealed class BattleGrpcService(IGameRepository repository) : Battle.Battl
             throw new RpcException(new Status(StatusCode.NotFound, "Partie inconnue."));
         }
 
-        var target = new Coordinates(request.Column, request.Row);
-        var outcome = game.Fire(target);
+        var outcome = game.FireFromClient(new Coordinates(request.Column, request.Row));
 
         if (outcome.Rejection is { } rejection)
         {
@@ -39,8 +38,8 @@ public sealed class BattleGrpcService(IGameRepository repository) : Battle.Battl
 
         return Task.FromResult(new ShotOutcome
         {
-            Column = target.Column,
-            Row = target.Row,
+            Column = outcome.Target.Column,
+            Row = outcome.Target.Row,
             Result = outcome.Result.ToString(),
             GameOver = game.Status is GameStatus.Finished,
             Winner = game.Winner?.Name ?? string.Empty
@@ -57,6 +56,12 @@ public sealed class BattleGrpcService(IGameRepository repository) : Battle.Battl
 
         FireRejection.GameFinished => new Status(
             StatusCode.FailedPrecondition, "La partie est terminée."),
+
+        FireRejection.NotTheClientTurn => new Status(
+            StatusCode.FailedPrecondition, "C'est au bot de jouer ; le client ne tire pas à sa place."),
+
+        FireRejection.NotTheBotTurn => new Status(
+            StatusCode.FailedPrecondition, "Ce n'est pas au bot de jouer."),
 
         _ => new Status(StatusCode.Unknown, "Tir refusé.")
     };

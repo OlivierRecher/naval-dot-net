@@ -26,6 +26,8 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
     public bool CanFire => View is not null && !IsOver && View.IsViewerTurn && !IsBusy;
 
+    public bool CanRetryBotTurn => View is not null && !IsOver && !View.IsViewerTurn && !IsBusy;
+
     public async Task StartAsync(string playerName, int side)
     {
         await RunAsync(async () =>
@@ -87,6 +89,26 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
         });
     }
 
+    /// <summary>
+    /// Rejoue le tour du bot apres un echec reseau : sans cela la partie reste
+    /// bloquee sur « Le bot joue… » et le joueur doit l'abandonner.
+    /// </summary>
+    public async Task RetryBotTurnAsync()
+    {
+        if (View is null || IsOver)
+        {
+            return;
+        }
+
+        var gameId = View.GameId;
+
+        await RunAsync(async () =>
+        {
+            await PlayBotTurnAsync(gameId);
+            await RefreshAsync(gameId);
+        });
+    }
+
     /// <summary>Revient a l'ecran de creation sans toucher a la partie cote serveur.</summary>
     public void Forget()
     {
@@ -102,6 +124,7 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
         if (!response.IsSuccessStatusCode)
         {
+            Failure = $"Le bot n'a pas pu jouer (HTTP {(int)response.StatusCode}). Votre tir est enregistré ; relancez le tour du bot.";
             return;
         }
 
