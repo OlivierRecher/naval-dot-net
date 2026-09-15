@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+option csharp_namespace = "BattleShip.Grpc";
+
+package battleship;
+
+// Fire est l'operation la plus frequente d'une partie : c'est la seule pour
+// laquelle un contrat binaire se justifie. Voir ADR 0005.
+service Battle {
+  rpc Fire (FireCommand) returns (ShotOutcome);
+}
+
+message FireCommand {
+  string game_id = 1;
+  int32 column = 2;
+  int32 row = 3;
+}
+
+message ShotOutcome {
+  int32 column = 1;
+  int32 row = 2;
+  string result = 3;
+  bool game_over = 4;
+  string winner = 5;
+}

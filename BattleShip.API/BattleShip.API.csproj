@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentValidation" Version="12.1.1" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
+    <PackageReference Include="Grpc.AspNetCore" Version="2.83.0" />
+    <PackageReference Include="Grpc.AspNetCore.Web" Version="2.83.0" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BattleShip.Domain\BattleShip.Domain.csproj" />
+    <ProjectReference Include="..\BattleShip.Models\BattleShip.Models.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- "Both" : le stub client sert aussi aux tests d'integration gRPC. -->
+    <Protobuf Include="../Protos/battleship.proto" GrpcServices="Both" />
+  </ItemGroup>
+
+</Project>
