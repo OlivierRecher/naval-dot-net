@@ -58,13 +58,18 @@ correspondante, et une tentative refusée n'en crée aucune.
   développeur de muter l'état sans journaliser. Seul un test le détecte.
 
 ## Vérification et réexamen
-- Un test vérifie qu'une tentative sur une case déjà visée **n'ajoute rien** au
-  journal et ne fait pas passer le tour.
-- Un test vérifie que le vainqueur déduit du journal est le même que celui porté
-  par l'état courant.
-- Contrôle de mutation : casser volontairement la règle « une case déjà visée
-  est refusée » doit faire échouer le test ci-dessus. Tant que cette
-  manipulation n'a pas été faite, le test ne prouve rien.
+- `Fire_OnACellAlreadyTargeted_AppendsNothingToTheJournal` : une tentative sur
+  une case déjà visée n'ajoute rien au journal et ne fait pas passer le tour.
+- `Shots_ReplayedOnFreshBoards_ReproduceEveryResultAndTheSameWinner` : rejouer
+  le journal sur des grilles neuves reproduit **chaque résultat de tir** et
+  désigne le même vainqueur. C'est ce test qui établit que le journal suffit à
+  reconstituer une partie, et donc que l'historique et les statistiques du
+  backlog item 5 reposent sur quelque chose.
+- `Shots_CountsPerPlayer_NeverDifferByMoreThanOne` : conséquence directe de
+  l'alternance ; si le tour sautait un joueur, l'écart se creuserait.
+- Contrôles de mutation exécutés : accepter une case déjà visée fait échouer les
+  trois tests de l'invalidation ; enregistrer au journal un résultat figé fait
+  échouer les quatre tests de rejeu.
 
 À réexaminer si la concurrence sur une même partie devenait réelle : l'option
 (b) redeviendrait attractive parce qu'elle supprime le problème au lieu de le

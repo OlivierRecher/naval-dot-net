@@ -55,9 +55,14 @@ L'anticipation est ici justifiée par un fait, pas par un principe : l'item 5 es
 - Aucun `ConcurrentDictionary` n'apparaît en dehors de l'implémentation :
   vérifiable par recherche textuelle.
 - Les endpoints ne dépendent que de `IGameRepository`, jamais du type concret.
-- Un test d'intégration substitue l'implémentation et passe sans modification
-  d'endpoint — c'est ce test qui **prouve** que l'abstraction sert à quelque
-  chose. Sans lui, cet ADR ne serait qu'une intention.
+- `Endpoints_RunAgainstASubstitutedRepository_WithoutAnyEndpointChange` :
+  une implémentation de test, volontairement non concurrente et distincte de
+  celle de production, est injectée ; les quatre endpoints fonctionnent sans
+  qu'une ligne change, et les compteurs du double établissent que la partie a
+  bien transité par lui. C'est ce test qui **prouve** que l'abstraction sert à
+  quelque chose. Sans lui, cet ADR ne serait qu'une intention.
+- Contrôle de mutation exécuté : supprimer l'appel `repository.Add(game)` dans
+  l'endpoint de création fait échouer ce test.
 
 À réexaminer si l'item 5 sortait du périmètre : l'abstraction deviendrait alors
 du code mort, et l'option (a) serait la bonne.
