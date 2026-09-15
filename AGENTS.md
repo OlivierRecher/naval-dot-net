@@ -150,6 +150,12 @@ ce qui prouve que l'échange est fonctionnel.
 Erreurs à démontrer : `InvalidArgument` (validation) · `NotFound` (partie
 inconnue) · `FailedPrecondition` (case déjà visée, partie terminée).
 
+La dernière est **démontrable depuis l'interface** : le bouton « Démontrer
+l'erreur gRPC-Web » rejoue un tir sur une case déjà visée, affiche le statut et
+le message renvoyés, et vérifie que le tour n'a pas été consommé. Sans lui,
+l'écran désactivant les cases connues, l'erreur n'était atteignable que par les
+tests — une réponse faible devant la checklist § 13.
+
 L'endpoint HTTP `POST /shots` est conservé, testé et documenté dans `api.http` :
 il coûte cinq lignes et donne à l'ADR un point de comparaison réel entre les
 deux transports.

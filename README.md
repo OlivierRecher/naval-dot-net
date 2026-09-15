@@ -144,7 +144,9 @@ CI=true dotnet build && CI=true dotnet test
 - **Le serveur est autoritaire.** Le client ne transmet jamais d'identité de
   joueur ; c'est le serveur qui décide quelle vue il accepte de publier. Les
   positions adverses non découvertes ne quittent jamais le serveur.
-- **Tir en gRPC-Web**, le reste du contrat en HTTP/JSON.
+- **Tir en gRPC-Web**, le reste du contrat en HTTP/JSON, avec un bouton qui
+  démontre l'erreur attendue — `FailedPrecondition` sur une case déjà visée — et
+  montre que le tour n'est pas consommé.
 - **Validation FluentValidation** sur toutes les entrées serveur, par filtre
   d'endpoint côté HTTP et par intercepteur côté gRPC.
 
@@ -221,10 +223,11 @@ binôme ne saurait ni terminer ni défendre.
   pool. Sans conséquence à cette échelle ; premier point à reprendre autrement.
   Voir l'[ADR 0008](./docs/adr/0008-verrou-par-partie-sur-l-agregat.md) et
   l'[ADR 0012](./docs/adr/0012-persistance-par-rejeu-du-journal.md).
-- **L'erreur gRPC-Web attendue n'est pas déclenchable depuis l'interface** :
-  l'écran désactive les cases déjà visées, donc le `FailedPrecondition` ne se
-  démontre que par les tests d'intégration
-  (`BattleGrpcServiceTests`) ou par un appel direct.
+- **L'erreur gRPC-Web se démontre depuis l'interface** : le bouton « Démontrer
+  l'erreur gRPC-Web », sous les grilles, rejoue volontairement un tir sur une case
+  déjà visée. Le serveur répond `FailedPrecondition`, l'écran affiche le statut et
+  le message, et vérifie que le tour n'a **pas** été consommé. L'écran désactive
+  normalement ces cases ; cette commande contourne l'interface, pas le serveur.
 - **Le tour du bot est un appel distinct du tir du joueur.** Si cet appel
   échoue, l'interface le signale et propose de le relancer, mais la partie reste
   en attente jusque-là.
