@@ -37,7 +37,7 @@ public class BattleGrpcServiceTests(WebApplicationFactory<Program> factory) : IC
 
     private async Task<Guid> CreateGameAsync(HttpClient client)
     {
-        var response = await client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, "Random", "Random"));
+        var response = await client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, "Solo", "Random", "Random"));
         response.EnsureSuccessStatusCode();
         var view = await response.Content.ReadFromJsonAsync<GameViewResponse>();
         return view!.GameId;

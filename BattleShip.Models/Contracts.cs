@@ -9,8 +9,10 @@ public sealed record CreateGameRequest(
     string PlayerName,
     int Columns,
     int Rows,
+    string Mode,
     string BotDifficulty,
-    string FleetPlacement);
+    string FleetPlacement,
+    string? OpponentName = null);
 
 public sealed record FireRequest(int Column, int Row);
 
@@ -46,6 +48,7 @@ public sealed record GameViewResponse(
     int Columns,
     int Rows,
     string ViewerName,
+    string OpponentName,
     bool IsViewerTurn,
     IReadOnlyList<ShipDto> OwnFleet,
     IReadOnlyList<CoordinatesDto> ShotsReceived,

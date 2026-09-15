@@ -9,7 +9,7 @@ public class GameEndpointsTests(WebApplicationFactory<Program> factory) : IClass
 {
     private readonly HttpClient _client = factory.CreateClient();
 
-    private static CreateGameRequest ValidRequest => new("Olivier", 10, 10, "Random", "Random");
+    private static CreateGameRequest ValidRequest => new("Olivier", 10, 10, "Solo", "Random", "Random");
 
     private async Task<GameViewResponse> CreateGameAsync()
     {
@@ -45,7 +45,7 @@ public class GameEndpointsTests(WebApplicationFactory<Program> factory) : IClass
     {
         // Aucun de ces endpoints n'appelle ValidateAsync : si le filtre generique
         // n'etait pas branche, ces requetes passeraient. Voir ADR 0006.
-        var response = await _client.PostAsJsonAsync("/games", new CreateGameRequest(name, columns, rows, difficulty, "Random"));
+        var response = await _client.PostAsJsonAsync("/games", new CreateGameRequest(name, columns, rows, "Solo", difficulty, "Random"));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }

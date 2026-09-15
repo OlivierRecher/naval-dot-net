@@ -34,7 +34,7 @@ public class BotDifficultyEndpointsTests(WebApplicationFactory<Program> factory)
     {
         var client = factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, difficulty, "Random"));
+        var response = await client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, "Solo", difficulty, "Random"));
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
@@ -58,7 +58,7 @@ public class BotDifficultyEndpointsTests(WebApplicationFactory<Program> factory)
             .CreateClient();
 
         var created = await client.PostAsJsonAsync(
-            "/games", new CreateGameRequest("Olivier", 10, 10, "HuntTargetParity", "Random"));
+            "/games", new CreateGameRequest("Olivier", 10, 10, "Solo", "HuntTargetParity", "Random"));
         var view = await created.Content.ReadFromJsonAsync<GameViewResponse>();
 
         await client.PostAsJsonAsync($"/games/{view!.GameId}/shots", new FireRequest(0, 0));
@@ -73,7 +73,7 @@ public class BotDifficultyEndpointsTests(WebApplicationFactory<Program> factory)
     {
         var client = factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, "Expert", "Random"));
+        var response = await client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, "Solo", "Expert", "Random"));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("HuntTargetParity", await response.Content.ReadAsStringAsync());
@@ -115,7 +115,7 @@ public class BotDifficultyEndpointsTests(WebApplicationFactory<Program> factory)
         var client = factory.CreateClient();
 
         var response = await client.PostAsJsonAsync(
-            "/games", new CreateGameRequest("Olivier", 10, 10, "hunttargetparity", "Random"));
+            "/games", new CreateGameRequest("Olivier", 10, 10, "Solo", "hunttargetparity", "Random"));
         var view = await response.Content.ReadFromJsonAsync<GameViewResponse>();
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);

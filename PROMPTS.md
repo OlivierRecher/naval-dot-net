@@ -497,3 +497,135 @@ précisément là qu'il est le plus utile, et c'est un angle qu'une relecture pa
 l'auteur n'a pas.
 
 **Commits** : branche `feat/placement-manuel`, PR #5.
+
+---
+
+## 2026-09-15 — Multijoueur local (hot-seat)
+
+**Outil / modèle** : Claude Code (Opus 5)
+
+**Contexte**
+Item 4 du backlog. L'ADR 0007 avait écarté le multijoueur en ligne au profit du
+hot-seat ; l'ADR 0003 pose que le serveur ne sert qu'une `GameView` à la fois.
+Ces deux décisions se combinent si bien que la difficulté de l'item n'est pas
+l'alternance — l'agrégat la faisait déjà — mais ceci : **dès le tir résolu, le
+serveur sert la vue du joueur suivant, donc sa flotte.** Sur un appareil
+partagé, celui qui vient de tirer regarde encore l'écran.
+
+**Prompt**
+Livrer le hot-seat. Commencer par écrire les tests de domaine **avant** toute
+modification de production, pour établir par exécution ce que l'agrégat sait déjà
+faire — plutôt que de l'affirmer, comme l'ADR 0010 l'avait fait à tort. Puis
+traiter la seule vraie question : qu'est-ce qui empêche un joueur de voir la
+flotte de l'autre, et qu'est-ce que cette protection ne protège pas.
+
+**Réponse résumée**
+
+| Sujet | Décision |
+|---|---|
+| Alternance | Aucune notion nouvelle : `FireLocked` échange les joueurs comme en `Solo` |
+| Protection | Un écran de passation ; tant qu'il est affiché, l'interface ne rend **rien** de la vue |
+| Portée de la protection | Elle protège d'un regard, **pas** d'un adversaire : la vue est déjà dans le navigateur |
+| `opponentName` | Exigé **uniquement** en `Local`, par une règle conditionnelle `.When()` |
+| `botDifficulty` | Exigé dans les deux modes — il a un défaut qui veut dire quelque chose, `opponentName` non |
+
+**Décision** : acceptée. Le point qui compte est le troisième.
+
+La passation ne peut pas être une protection réelle, et l'ADR le dit sans
+détour : la vue du joueur suivant arrive dans le navigateur en réponse au tir,
+avant que l'écran de passation ne s'affiche. Faire confirmer la passation au
+serveur n'y changerait rien — c'est le même client non fiable qui confirmerait.
+Sur un appareil partagé, les données des deux joueurs passent nécessairement par
+le même navigateur.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| 6 tests de domaine écrits **avant** toute production | Verts sans modification — l'agrégat savait déjà jouer à deux humains |
+| `dotnet build` puis `dotnet test` | 192 tests, 0 échec (175 avant l'item) |
+| Invariant du hot-seat | `ASequenceOfShots_NeverServesTwoFleetsAtOnce` : 12 tirs, une seule flotte par réponse, jamais changeante — doublé d'un garde contre deux flottes identiques |
+| 4 mutations, chacune rétablie | Chacune met au moins un test au rouge |
+| Parcours navigateur | Création, tir, passation muette, confirmation, tour du second joueur avec sa propre flotte |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- Le parcours navigateur a demandé **quatre essais** : trois défauts d'interface
+  qu'aucun des 192 tests ne couvrait. Voir `REVUE-IA.md`, revue 7.
+- Le **placement manuel en hot-seat** — deux joueurs posant chacun leur flotte —
+  est couvert côté serveur mais **n'a pas été joué à la main**. C'est la
+  combinaison la moins éprouvée de la livraison.
+- Aucune partie hot-seat n'a été menée jusqu'à la victoire dans le navigateur.
+- Rien n'empêche un joueur de confirmer la passation à la place de l'autre.
+
+**Constat de méthode**
+Écrire les tests de domaine avant la production a produit un résultat qu'on
+n'attendait pas : ils sont tous passés. C'est une information — l'item 3 avait
+correctement généralisé — mais elle ne dit rien du travail restant, et l'avoir
+lue comme un avancement a coûté trois allers-retours au navigateur.
+
+**Commits** : branche `feat/hot-seat`, PR #6.
+
+---
+
+## 2026-09-15 — Traitement de la revue de la PR #6
+
+**Outil / modèle** : Claude Code (Opus 5) · relecteur : GitHub Copilot code review
+
+**Contexte**
+Un seul commentaire, sur `GameSession.FireAsync` : si le rafraîchissement échoue
+après un tir accepté, la passation n'est jamais armée et l'interface revient sur
+la vue périmée du tireur.
+
+**Prompt**
+Vérifier la conséquence annoncée avant de corriger — un relecteur qui décrit
+correctement un défaut peut en décrire incorrectement l'effet.
+
+**Réponse résumée**
+
+**Le diagnostic est juste, la conséquence annoncée est fausse, et la réalité est
+pire.** Copilot écrit que « la partie reste bloquée sur `NotTheClientTurn` ».
+Ce refus n'existe pas en hot-seat : il ne se déclenche que si le joueur courant
+est un **bot**, et une partie `Local` n'en a aucun.
+
+Ce qui se passe réellement : la vue périmée du tireur dit encore « à vous »,
+donc `CanFire` redevient vrai. S'il retire, `Game.FireFromClient` accepte — le
+serveur ne sait pas qui est au clavier, c'est précisément la décision de l'ADR
+0003. **Le premier joueur joue le tour du second sans que rien ne le signale.**
+
+La passation n'est donc pas un confort d'affichage de plus : c'est le **seul
+garde du tour** en hot-seat. Elle ne peut pas dépendre d'un appel qui peut
+échouer.
+
+Correction : la passation est armée **dès le tir accepté**, avant le
+rafraîchissement. Pour cela la `GameView` publie le **nom de l'adversaire** —
+un nom, jamais une position, et que le joueur connaît déjà. Confirmer est refusé
+tant que la vue suivante n'est pas arrivée : confirmer sur une vue périmée
+afficherait la flotte du joueur *précédent*. L'écran propose de réessayer.
+
+**Décision** : diagnostic retenu, conséquence corrigée, correctif étendu.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 195 tests, 0 échec (192 avant la revue) |
+| Mutation — la vue nomme le viewer au lieu de l'adversaire | 2 tests domaine + 1 test API au rouge |
+| Parcours navigateur après correction | Création, tir, passation, confirmation — inchangé |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- **Le chemin d'échec qui motive la correction n'a pas été déclenché.** Il
+  faudrait couper le réseau entre deux appels consécutifs du navigateur. La
+  correction est établie par lecture, pas par expérience.
+- Aucun test ne couvre `GameSession` : c'est la zone que `AGENTS.md` § 8 laisse
+  hors périmètre. Un `HttpMessageHandler` de test la rendrait accessible, et
+  c'est exactement ce qu'il faudrait pour éprouver ce chemin.
+
+**Constat de méthode**
+Une remarque peut être juste sur le défaut et fausse sur ses conséquences.
+Recopier la conséquence annoncée aurait produit un correctif correct et une
+justification erronée — donc une ligne d'ADR indéfendable à l'oral. Le défaut
+méritait d'être vérifié dans le domaine, pas seulement dans le fichier signalé.
+
+**Commits** : branche `feat/hot-seat`, PR #6.

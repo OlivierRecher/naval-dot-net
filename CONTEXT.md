@@ -71,7 +71,8 @@ balayage.
 |---|---|---|
 | Vue de partie | `GameView` | Ce qu'un joueur donné — le **viewer** — a le droit de voir, et rien de plus : sa propre flotte, les tirs reçus, et le résultat de ses propres tirs sur la grille adverse. Le viewer n'est pas toujours le joueur courant : voir `ViewForClient`. |
 | Vue servie au client | `ViewForClient` | La `GameView` que le serveur accepte d'envoyer au navigateur. Elle suit le joueur courant **sauf quand celui-ci est un bot** : un bot n'a pas de client, et lui servir sa vue reviendrait à publier sa flotte. |
-| Passation | `Handover` | En mode `Local`, l'écran qui masque tout pendant le changement de joueur. C'est une **protection d'affichage** ; la protection réelle est que le serveur ne transmet jamais autre chose qu'une `GameView`. |
+| Passation | `Handover` | En mode `Local`, l'écran qui masque tout pendant le changement de joueur. C'est une **protection d'affichage** ; la protection réelle est que le serveur ne transmet jamais autre chose qu'une `GameView`. Le nom du joueur attendu est porté par `HandoverTo` ; tant qu'il n'est pas nul, l'interface n'affiche rien de la vue. |
+| Tireur | `Shooter` | Le joueur qui vient de tirer. En hot-seat il n'est plus le viewer au moment où le message s'affiche : le message doit le **nommer**, pas dire « vous ». |
 
 ## Mots écartés
 

@@ -226,6 +226,9 @@ public sealed class Game
             Mode,
             viewer.Board.Size,
             viewer.Name,
+            // Un nom, jamais une position : l'adversaire est deja connu du
+            // joueur, qui l'a saisi ou affronte un bot. Voir ADR 0003.
+            ReferenceEquals(viewer, _current) ? _waiting.Name : _current.Name,
             ReferenceEquals(viewer, _current),
             [.. viewer.Board.Ships.Select(ship => new ShipView(ship.Kind, ship.Cells, [.. ship.Hits], ship.IsSunk))],
             [.. viewer.Board.IncomingShots],

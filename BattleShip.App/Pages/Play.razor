@@ -24,12 +24,26 @@
     <div class="card p-3 setup">
         <h2 class="h5">Nouvelle partie</h2>
 
+        <label class="form-label" for="mode">Adversaire</label>
+        <select id="mode" class="form-select mb-3" @bind="_mode">
+            <option value="Solo">Un bot</option>
+            <option value="Local">Un second joueur, sur cet appareil</option>
+        </select>
+
         <label class="form-label" for="player">Votre nom</label>
         <input id="player" class="form-control mb-3" @bind="_playerName" />
+
+        @if (_mode == "Local")
+        {
+            <label class="form-label" for="opponent">Nom du second joueur</label>
+            <input id="opponent" class="form-control mb-3" @bind="_opponentName" />
+        }
 
         <label class="form-label" for="side">Taille de la grille</label>
         <input id="side" type="number" min="8" max="20" class="form-control mb-3" @bind="_side" />
 
+        @if (_mode == "Solo")
+        {
         <label class="form-label" for="difficulty">Difficulté du bot</label>
         <select id="difficulty" class="form-select" @bind="_botDifficulty">
             @foreach (var option in BotDifficultyCatalog.All)
@@ -38,6 +52,7 @@
             }
         </select>
         <p class="form-text mb-3">@BotDifficultyCatalog.SummaryOf(_botDifficulty)</p>
+        }
 
         <label class="form-label" for="placement">Placement de votre flotte</label>
         <select id="placement" class="form-select mb-3" @bind="_fleetPlacement">
@@ -48,6 +63,34 @@
         <button class="btn btn-primary" @onclick="StartAsync" disabled="@Session.IsBusy">
             @(Session.IsBusy ? "Création…" : "Lancer la partie")
         </button>
+    </div>
+}
+else if (Session.IsAwaitingHandover)
+{
+    <div class="card p-4 setup text-center">
+        <h2 class="h4">Passez l'appareil</h2>
+        <p class="lead mb-1">Au tour de <strong>@Session.HandoverTo</strong>.</p>
+        @if (Session.Notice is not null)
+        {
+            <p class="text-muted">@Session.Notice</p>
+        }
+        <p class="form-text">
+            Rien n'est affiché tant que vous n'avez pas confirmé : l'écran suivant montre
+            la flotte de @Session.HandoverTo.
+        </p>
+        @if (Session.IsHandoverReady)
+        {
+            <button class="btn btn-primary mt-2" @onclick="ConfirmHandover">
+                Je suis @Session.HandoverTo, afficher mon tour
+            </button>
+        }
+        else
+        {
+            <p class="text-danger">L'état de la partie n'a pas pu être récupéré ; rien ne peut être affiché sans lui.</p>
+            <button class="btn btn-outline-danger mt-2" disabled="@Session.IsBusy" @onclick="RetryHandoverAsync">
+                @(Session.IsBusy ? "Récupération…" : "Réessayer")
+            </button>
+        }
     </div>
 }
 else if (Session.IsPlacingFleet)
@@ -144,8 +187,11 @@ else
         }
         else
         {
-            <strong>@(Session.View.IsViewerTurn ? "À vous de jouer." : "Le bot joue…")</strong>
-            <span class="badge text-bg-dark ms-1">@BotDifficultyCatalog.LabelOf(Session.View.BotDifficulty)</span>
+            <strong>@(Session.View.IsViewerTurn ? $"Au tour de {Session.View.ViewerName}." : "Le bot joue…")</strong>
+            @if (!Session.IsHotSeat)
+            {
+                <span class="badge text-bg-dark ms-1">@BotDifficultyCatalog.LabelOf(Session.View.BotDifficulty)</span>
+            }
         }
         @if (Session.Notice is not null)
         {
@@ -207,6 +253,8 @@ else
     private int _side = 10;
     private string _botDifficulty = BotDifficultyCatalog.All[0].Name;
     private string _fleetPlacement = "Random";
+    private string _mode = "Solo";
+    private string _opponentName = "Ulysse";
     private string _orientation = "Horizontal";
     private readonly List<ShipPlacementDto> _placed = [];
     private HashSet<CoordinatesDto> _takenCells = [];
@@ -307,8 +355,18 @@ else
     private async Task StartAsync()
     {
         ClearFleet();
-        await Session.StartAsync(_playerName, _side, _botDifficulty, _fleetPlacement);
+        await Session.StartAsync(_playerName, _side, _mode, _botDifficulty, _fleetPlacement,
+            _mode == "Local" ? _opponentName : null);
     }
+
+    /// <summary>La flotte posee appartient au joueur precedent : l'ecran suivant repart de zero.</summary>
+    private void ConfirmHandover()
+    {
+        ClearFleet();
+        Session.ConfirmHandover();
+    }
+
+    private async Task RetryHandoverAsync() => await Session.RetryHandoverAsync();
 
     private async Task FireAsync(CoordinatesDto target) => await Session.FireAsync(target.Column, target.Row);
 

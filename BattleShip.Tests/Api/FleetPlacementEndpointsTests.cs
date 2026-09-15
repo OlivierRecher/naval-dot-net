@@ -10,7 +10,7 @@ public class FleetPlacementEndpointsTests(WebApplicationFactory<Program> factory
 {
     private readonly HttpClient _client = factory.CreateClient();
 
-    private static CreateGameRequest Manual => new("Olivier", 10, 10, "Random", "Manual");
+    private static CreateGameRequest Manual => new("Olivier", 10, 10, "Solo", "Random", "Manual");
 
     private static List<ShipPlacementDto> ValidFleet() =>
     [
@@ -42,7 +42,7 @@ public class FleetPlacementEndpointsTests(WebApplicationFactory<Program> factory
     [Fact]
     public async Task CreateGame_WithRandomPlacement_StartsImmediately()
     {
-        var response = await _client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, "Random", "Random"));
+        var response = await _client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, "Solo", "Random", "Random"));
         var view = await response.Content.ReadFromJsonAsync<GameViewResponse>();
 
         Assert.Equal("InProgress", view!.Status);
@@ -116,7 +116,7 @@ public class FleetPlacementEndpointsTests(WebApplicationFactory<Program> factory
     [Fact]
     public async Task PlaceFleet_OnAGameWhoseFleetWasPlacedAtRandom_Returns409()
     {
-        var created = await _client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, "Random", "Random"));
+        var created = await _client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, "Solo", "Random", "Random"));
         var game = await created.Content.ReadFromJsonAsync<GameViewResponse>();
 
         var response = await _client.PutAsJsonAsync($"/games/{game!.GameId}/fleet", new PlaceFleetRequest(ValidFleet()));
@@ -187,7 +187,7 @@ public class FleetPlacementEndpointsTests(WebApplicationFactory<Program> factory
     [InlineData("42")]
     public async Task CreateGame_WithAnUnknownFleetPlacement_Returns400(string placement)
     {
-        var response = await _client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, "Random", placement));
+        var response = await _client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, "Solo", "Random", placement));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }

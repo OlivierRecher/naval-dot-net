@@ -21,6 +21,18 @@ public sealed class CreateGameRequestValidator : AbstractValidator<CreateGameReq
         RuleFor(request => request.Rows)
             .InclusiveBetween(MinBoardSide, MaxBoardSide);
 
+        RuleFor(request => request.Mode)
+            .Must(mode => EnumNames<GameMode>.TryParse(mode, out _))
+            .WithMessage($"Mode de jeu inconnu : attendu {string.Join(", ", EnumNames<GameMode>.All)}.");
+
+        // Le nom de l'adversaire n'a de sens qu'en hot-seat. En Solo, l'adversaire
+        // est un bot que le serveur nomme lui-meme.
+        RuleFor(request => request.OpponentName)
+            .NotEmpty()
+            .MaximumLength(40)
+            .When(request => string.Equals(request.Mode, nameof(GameMode.Local), StringComparison.OrdinalIgnoreCase))
+            .WithMessage("Une partie locale oppose deux joueurs : le nom du second est obligatoire.");
+
         RuleFor(request => request.FleetPlacement)
             .Must(placement => EnumNames<FleetPlacement>.TryParse(placement, out _))
             .WithMessage($"Placement de flotte inconnu : attendu {string.Join(", ", EnumNames<FleetPlacement>.All)}.");

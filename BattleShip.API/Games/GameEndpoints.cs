@@ -38,16 +38,23 @@ public static class GameEndpoints
     {
         var size = new BoardSize(request.Columns, request.Rows);
         var placement = EnumNames<FleetPlacement>.Parse(request.FleetPlacement);
+        var mode = EnumNames<GameMode>.Parse(request.Mode);
 
         try
         {
-            var humanBoard = placement is FleetPlacement.Manual
+            Board HumanBoard() => placement is FleetPlacement.Manual
                 ? new Board(size)
                 : placer.Place(size, FleetTemplate.Standard);
 
-            var human = new Player(request.PlayerName, isBot: false, humanBoard);
-            var bot = new Player("Bot", isBot: true, placer.Place(size, FleetTemplate.Standard));
-            var game = new Game(GameMode.Solo, human, bot, EnumNames<BotDifficulty>.Parse(request.BotDifficulty));
+            var first = new Player(request.PlayerName, isBot: false, HumanBoard());
+
+            // En hot-seat les deux joueurs sont humains, donc les deux posent leur
+            // flotte ; en Solo le serveur remplit toujours la grille du bot.
+            var second = mode is GameMode.Local
+                ? new Player(request.OpponentName!, isBot: false, HumanBoard())
+                : new Player("Bot", isBot: true, placer.Place(size, FleetTemplate.Standard));
+
+            var game = new Game(mode, first, second, EnumNames<BotDifficulty>.Parse(request.BotDifficulty));
 
             repository.Add(game);
 

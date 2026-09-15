@@ -14,6 +14,7 @@ internal static class GameMapper
         view.Size.Columns,
         view.Size.Rows,
         view.ViewerName,
+        view.OpponentName,
         view.IsViewerTurn,
         [.. view.OwnFleet.Select(ship => new ShipDto(
             ship.Kind.ToString(),
