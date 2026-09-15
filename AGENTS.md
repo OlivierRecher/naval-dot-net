@@ -80,8 +80,14 @@ BattleShip.Tests    xUnit        → Domain, API   (dossiers Domain/ et Api/)
 - `Game` est un **agrégat mutable** doublé d'un **journal de tirs en ajout seul**
   (`Shots`). Le journal fournit rejeu, historique et statistiques presque gratuitement.
 - Les vérifications de règles sont des **fonctions pures**, testables sans instancier une partie.
-- Stockage : `ConcurrentDictionary<Guid, Game>` derrière **`IGameRepository`**,
-  enregistré en **Singleton**. L'interface est le point de bascule vers SQLite ; aucun endpoint ne doit changer le jour où on bascule.
+- Stockage : **SQLite via EF Core** derrière `IGameRepository`, enregistré en
+  **Scoped** avec son `DbContext`. Seuls les placements et le journal sont
+  écrits ; tout le reste est **rejoué**. Un cache Singleton conserve les parties
+  vivantes, sans quoi le verrou de l'agrégat ne sérialiserait plus rien.
+  Voir ADR 0012.
+- `IGameRepository` porte un **point de validation** `Save(Game)`. L'ADR 0004
+  n'en avait pas prévu : un dépôt en mémoire n'en a pas besoin, un dépôt
+  persistant ne peut pas s'en passer.
 - Le dictionnaire concurrent protège la **table**, pas la partie qu'elle contient.
   L'agrégat `Game` porte son propre verrou et sérialise ses transitions et ses
   projections. Voir ADR 0008.
@@ -112,6 +118,8 @@ GET    /games/{id}            → 200 GameView | 404
 POST   /games/{id}/shots      → 200 ShotOutcome | 400 | 404 | 409
 POST   /games/{id}/bot-turn   → 200 ShotOutcome | 404 | 409
 PUT    /games/{id}/fleet      → 200 GameView | 400 | 404 | 409   (placement manuel)
+GET    /games?limit=n         → 200 GameSummary[]                (historique)
+GET    /stats                 → 200 Statistics
 ```
 
 - `POST /shots` résout **uniquement le coup du joueur courant**. La riposte du
@@ -227,7 +235,7 @@ et comprise par le binôme. »
 2. ~~**Niveaux de bot** — `Random`, `HuntTarget`, `HuntTargetParity`~~ — livré, ADR 0009
 3. ~~**Placement manuel de la flotte** — le placement aléatoire reste offert~~ — livré, ADR 0010
 4. ~~**Multijoueur local (hot-seat)** — écran de passation ; le secret reste garanti côté serveur~~ — livré, ADR 0011
-5. **Persistance + historique + statistiques** — SQLite / EF Core derrière `IGameRepository`
+5. ~~**Persistance + historique + statistiques** — SQLite / EF Core derrière `IGameRepository`~~ — livré, ADR 0012
 6. **Personnalisation** — taille de grille, composition de flotte
 7. *(stretch)* Déploiement
 
@@ -267,6 +275,7 @@ ADR déjà identifiés par le cadrage :
 - `0009` La difficulté du bot est une donnée de la partie, résolue par une fabrique
 - `0010` Le statut `AwaitingFleet` se déduit des grilles, et la flotte est validée en bloc
 - `0011` Le hot-seat est une alternance de vues, et la passation protège l'écran
+- `0012` Persister le journal, rejouer le reste
 
 ### `REVUE-IA.md`
 **Trois revues minimum.** Proposition · hypothèse à vérifier · expérience

@@ -629,3 +629,137 @@ justification erronée — donc une ligne d'ADR indéfendable à l'oral. Le déf
 méritait d'être vérifié dans le domaine, pas seulement dans le fichier signalé.
 
 **Commits** : branche `feat/hot-seat`, PR #6.
+
+---
+
+## 2026-09-15 — Persistance SQLite, historique et statistiques
+
+**Outil / modèle** : Claude Code (Opus 5)
+
+**Contexte**
+Item 5 du backlog. Le premier à mettre à l'épreuve une promesse écrite au socle :
+l'ADR 0004 annonçait que la bascule vers SQLite « ne toucherait aucun endpoint ».
+
+Le risque identifié n'était pas d'échouer à écrire du EF Core, mais de persister
+**trop** : `Game` porte deux grilles, des impacts, des navires coulés, un tour,
+un statut, un vainqueur. Tout mapper aurait produit un schéma large dont chaque
+colonne dérivée peut diverger de ce dont elle dérive.
+
+**Prompt**
+Livrer la persistance derrière `IGameRepository`, plus l'historique et les
+statistiques. Décider d'abord **ce qui mérite d'être écrit**, en tenant compte de
+ce que l'ADR 0002 annonçait à propos du journal en ajout seul. Puis compter
+précisément ce que la bascule change, pour vérifier ou réfuter l'ADR 0004.
+
+**Réponse résumée**
+
+| Sujet | Décision |
+|---|---|
+| Ce qui est écrit | Les **placements** et le **journal ordonné**. Rien de dérivable |
+| Ce qui est rejoué | Impacts, navires coulés, tirs reçus, tour courant, statut, vainqueur |
+| Exception | Le **résultat** de chaque tir, dérivable mais stocké — pour les statistiques en SQL. Un test interdit qu'il diverge |
+| Instances | Un cache Singleton publie une partie et une seule, sinon le verrou de l'ADR 0008 ne sérialise plus rien |
+| Asynchronisme | `IGameRepository` reste **synchrone** : le rendre `async` aurait rendu chaque endpoint `async` |
+| Historique | `IGameHistory`, séparée : elle interroge des colonnes, elle ne rejoue rien |
+
+**Décision** : acceptée. La promesse de l'ADR 0004 est **partiellement réfutée** —
+voir `REVUE-IA.md`, revue 8.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 217 tests, 0 échec (195 avant l'item) |
+| Tests d'API | Sur un **vrai SQLite en mémoire**, un par classe : schéma, contraintes et SQL réellement exercés |
+| Survie au redémarrage | Dépôt et cache neufs sur la même base : mêmes tirs, même vue, même flotte |
+| Mutation sans `Save` | Le tir existe en mémoire, pas en base — c'est ce test qui donne son sens au point de validation |
+| `ORDER BY` sur `DateTimeOffset` | **Refusé par SQLite** — découvert par exécution, pas par lecture. Dates stockées en ticks UTC |
+| 7 mutations | **3 survivantes au premier passage**, toutes corrigées par des tests, aucune par du code |
+| Parcours navigateur | Partie jouée, **API redémarrée**, partie retrouvée intacte ; page d'historique et statistiques |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- Le cache et le verrou ne couvrent **qu'un processus**. Deux instances de l'API
+  sur la même base joueraient chacune sur sa copie. L'ADR 0008 l'annonçait ; cet
+  item le confirme sans le corriger.
+- `Save` n'a **ni transaction explicite ni verrou optimiste**.
+- Le dépôt synchrone bloque un fil du pool sur chaque entrée/sortie. Sans
+  conséquence mesurable ici, premier point à reprendre à une échelle réelle.
+- Aucune migration : le schéma est créé au démarrage. Une évolution de schéma sur
+  une base existante n'est donc pas couverte.
+
+**Constat de méthode**
+Trois des sept mutations ont survécu, et **aucune ne révélait un défaut du
+code** : toutes trois révélaient un test qui ne protégeait rien. L'une d'elles
+— les statistiques ignorant les navires coulés — passait parce que le test
+recalculait l'attendu à partir de la réponse du serveur. C'est exactement le
+défaut de la revue 2, reproduit quatre items plus loin, par la même personne qui
+l'avait écrite.
+
+**Commits** : branche `feat/persistance`, PR #7.
+
+---
+
+## 2026-09-15 — Traitement de la revue de la PR #7
+
+**Outil / modèle** : Claude Code (Opus 5) · relecteur : GitHub Copilot code review
+
+**Contexte**
+Cinq commentaires sur la persistance. Contrairement aux revues précédentes,
+aucun ne portait sur un écart entre le code et ce que la PR annonçait : tous
+portaient sur du code.
+
+**Réponse résumée**
+
+| # | Remarque | Traitement |
+|---|---|---|
+| 1 | `Save` lit l'agrégat **hors de son verrou** | Retenue — la plus sérieuse |
+| 2 | L'historique annonce `InProgress` pour une partie qui attend sa flotte | Retenue |
+| 3 | Le cache ne relâche jamais les parties terminées | Retenue |
+| 4 | La page d'historique appelle `HttpClient` directement, contre `AGENTS.md` § 6 | Retenue |
+| 5 | Faute d'orthographe dans un commentaire | Retenue |
+
+**Décision** : 5 retenues sur 5.
+
+La première méritait sa place en tête. `Save` lisait `Status`, `CurrentPlayer`,
+`Opponent` et énumérait `Board.Ships` sans prendre le verrou de `Game`. Or
+l'échange de tour est une affectation de tuple — non atomique — et `Board.Ships`
+rend la liste vivante. Une écriture concurrente d'un tir pouvait donc persister un
+état mélangeant deux instants, ou lever une exception d'énumération.
+`Game.Snapshot()` rend désormais une photographie prise sous le verrou.
+
+La quatrième est un rappel à une règle que le projet s'était donnée et que sa
+propre page violait : `AGENTS.md` § 6 impose que tous les appels réseau passent
+par `GameSession`. La page d'historique avait son propre `HttpClient` et sa propre
+gestion d'erreur — un second chemin réseau, avec un second endroit où « chargement,
+succès, échec » devait être tenu à jour.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 221 tests, 0 échec (217 avant la revue) |
+| Mutation — `Snapshot` sans verrou | **A d'abord survécu** : 200 tours ne suffisaient pas. À 20 000, le test attrape l'exception d'énumération |
+| Mutation — sièges suivant le tour courant | **A d'abord survécu** : aucun test ne distinguait l'ordre d'ouverture de l'ordre du tour. Test ajouté |
+| Mutation — partie terminée gardée en cache | 1 test au rouge |
+| Mutation — historique ignorant l'attente de flotte | 1 test au rouge |
+| Appels réseau hors `GameSession` | `grep` sur la page : aucun |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- Le test de cohérence sous concurrence **attrape l'occurrence** d'une lecture
+  déchirée, il n'établit pas son absence. Il a fallu 20 000 tours pour la
+  produire de façon fiable sur cette machine ; rien ne garantit qu'une machine
+  plus lente la produirait.
+- L'éviction du cache à la fin d'une partie n'est pas éprouvée **sous
+  concurrence** : une lecture simultanée à l'éviction rechargerait la partie
+  depuis SQLite, ce qui est correct, mais aucun test ne l'instancie.
+
+**Constat de méthode**
+Deux des quatre mutations posées après la revue ont survécu au premier passage,
+pour deux raisons différentes : l'une parce que le test ne mettait pas assez de
+pression, l'autre parce qu'aucun test ne distinguait deux notions que le code
+distingue. La seconde est la plus instructive — le correctif introduisait une
+distinction juste, et rien ne la protégeait.
+
+**Commits** : branche `feat/persistance`, PR #7.

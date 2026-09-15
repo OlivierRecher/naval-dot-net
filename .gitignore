@@ -55,3 +55,8 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# Base SQLite locale (item 5) : ne jamais versionner les parties
+*.db
+*.db-shm
+*.db-wal

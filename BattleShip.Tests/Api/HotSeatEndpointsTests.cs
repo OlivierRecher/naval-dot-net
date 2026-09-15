@@ -5,8 +5,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace BattleShip.Tests.Api;
 
-public class HotSeatEndpointsTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+public class HotSeatEndpointsTests(ApiFactory factory)
+    : IClassFixture<ApiFactory>
 {
     private readonly HttpClient _client = factory.CreateClient();
 

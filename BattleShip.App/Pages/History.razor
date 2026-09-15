@@ -1,0 +1,94 @@
+@page "/historique"
+@using BattleShip.App.Services
+@using BattleShip.Models
+@implements IDisposable
+@inject GameSession Session
+
+<PageTitle>Historique — Bataille navale</PageTitle>
+
+<h1 class="mb-3">Historique</h1>
+
+@if (Session.Failure is not null)
+{
+    <div class="alert alert-danger" role="alert">
+        @Session.Failure
+        <button class="btn btn-sm btn-outline-danger ms-2" disabled="@Session.IsBusy" @onclick="LoadAsync">Réessayer</button>
+    </div>
+}
+else if (Session.Statistics is null)
+{
+    <p>Chargement…</p>
+}
+else
+{
+    <div class="card p-3 mb-4">
+        <h2 class="h5">Statistiques</h2>
+        <dl class="row mb-0">
+            <dt class="col-sm-4">Parties jouées</dt>
+            <dd class="col-sm-8">@Session.Statistics.Games — dont @Session.Statistics.Finished terminée(s)</dd>
+
+            <dt class="col-sm-4">Tirs enregistrés</dt>
+            <dd class="col-sm-8">@Session.Statistics.Shots</dd>
+
+            <dt class="col-sm-4">Touchés / coulés</dt>
+            <dd class="col-sm-8">@Session.Statistics.Hits / @Session.Statistics.Sunk</dd>
+
+            <dt class="col-sm-4">Précision</dt>
+            <dd class="col-sm-8">@Session.Statistics.Accuracy.ToString("P1")</dd>
+        </dl>
+    </div>
+
+    <h2 class="h5">Dernières parties</h2>
+
+    @if (Session.History.Count is 0)
+    {
+        <p>Aucune partie enregistrée pour l'instant.</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead>
+                    <tr>
+                        <th scope="col">Début</th>
+                        <th scope="col">Mode</th>
+                        <th scope="col">Joueurs</th>
+                        <th scope="col">Tirs</th>
+                        <th scope="col">Issue</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var game in Session.History)
+                    {
+                        <tr>
+                            <td>@game.StartedAt.ToLocalTime().ToString("dd/MM HH:mm")</td>
+                            <td>@ModeOf(game)</td>
+                            <td>@game.FirstPlayer contre @game.SecondPlayer</td>
+                            <td>@game.Shots</td>
+                            <td>@(game.Winner is null ? "en cours" : $"{game.Winner} l'emporte")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+<a class="btn btn-outline-secondary mt-3" href="">Retour au jeu</a>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        Session.OnChange += StateHasChanged;
+        await LoadAsync();
+    }
+
+    public void Dispose() => Session.OnChange -= StateHasChanged;
+
+    private async Task LoadAsync() => await Session.LoadHistoryAsync();
+
+    private static string ModeOf(GameSummaryResponse game) =>
+        game.Mode == "Local"
+            ? "Duel"
+            : $"Solo — {BotDifficultyCatalog.LabelOf(game.BotDifficulty)}";
+}
