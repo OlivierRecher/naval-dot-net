@@ -497,3 +497,71 @@ précisément là qu'il est le plus utile, et c'est un angle qu'une relecture pa
 l'auteur n'a pas.
 
 **Commits** : branche `feat/placement-manuel`, PR #5.
+
+---
+
+## 2026-09-15 — Multijoueur local (hot-seat)
+
+**Outil / modèle** : Claude Code (Opus 5)
+
+**Contexte**
+Item 4 du backlog. L'ADR 0007 avait écarté le multijoueur en ligne au profit du
+hot-seat ; l'ADR 0003 pose que le serveur ne sert qu'une `GameView` à la fois.
+Ces deux décisions se combinent si bien que la difficulté de l'item n'est pas
+l'alternance — l'agrégat la faisait déjà — mais ceci : **dès le tir résolu, le
+serveur sert la vue du joueur suivant, donc sa flotte.** Sur un appareil
+partagé, celui qui vient de tirer regarde encore l'écran.
+
+**Prompt**
+Livrer le hot-seat. Commencer par écrire les tests de domaine **avant** toute
+modification de production, pour établir par exécution ce que l'agrégat sait déjà
+faire — plutôt que de l'affirmer, comme l'ADR 0010 l'avait fait à tort. Puis
+traiter la seule vraie question : qu'est-ce qui empêche un joueur de voir la
+flotte de l'autre, et qu'est-ce que cette protection ne protège pas.
+
+**Réponse résumée**
+
+| Sujet | Décision |
+|---|---|
+| Alternance | Aucune notion nouvelle : `FireLocked` échange les joueurs comme en `Solo` |
+| Protection | Un écran de passation ; tant qu'il est affiché, l'interface ne rend **rien** de la vue |
+| Portée de la protection | Elle protège d'un regard, **pas** d'un adversaire : la vue est déjà dans le navigateur |
+| `opponentName` | Exigé **uniquement** en `Local`, par une règle conditionnelle `.When()` |
+| `botDifficulty` | Exigé dans les deux modes — il a un défaut qui veut dire quelque chose, `opponentName` non |
+
+**Décision** : acceptée. Le point qui compte est le troisième.
+
+La passation ne peut pas être une protection réelle, et l'ADR le dit sans
+détour : la vue du joueur suivant arrive dans le navigateur en réponse au tir,
+avant que l'écran de passation ne s'affiche. Faire confirmer la passation au
+serveur n'y changerait rien — c'est le même client non fiable qui confirmerait.
+Sur un appareil partagé, les données des deux joueurs passent nécessairement par
+le même navigateur.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| 6 tests de domaine écrits **avant** toute production | Verts sans modification — l'agrégat savait déjà jouer à deux humains |
+| `dotnet build` puis `dotnet test` | 192 tests, 0 échec (175 avant l'item) |
+| Invariant du hot-seat | `ASequenceOfShots_NeverServesTwoFleetsAtOnce` : 12 tirs, une seule flotte par réponse, jamais changeante — doublé d'un garde contre deux flottes identiques |
+| 4 mutations, chacune rétablie | Chacune met au moins un test au rouge |
+| Parcours navigateur | Création, tir, passation muette, confirmation, tour du second joueur avec sa propre flotte |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- Le parcours navigateur a demandé **quatre essais** : trois défauts d'interface
+  qu'aucun des 192 tests ne couvrait. Voir `REVUE-IA.md`, revue 7.
+- Le **placement manuel en hot-seat** — deux joueurs posant chacun leur flotte —
+  est couvert côté serveur mais **n'a pas été joué à la main**. C'est la
+  combinaison la moins éprouvée de la livraison.
+- Aucune partie hot-seat n'a été menée jusqu'à la victoire dans le navigateur.
+- Rien n'empêche un joueur de confirmer la passation à la place de l'autre.
+
+**Constat de méthode**
+Écrire les tests de domaine avant la production a produit un résultat qu'on
+n'attendait pas : ils sont tous passés. C'est une information — l'item 3 avait
+correctement généralisé — mais elle ne dit rien du travail restant, et l'avoir
+lue comme un avancement a coûté trois allers-retours au navigateur.
+
+**Commits** : branche `feat/hot-seat`, PR #6.

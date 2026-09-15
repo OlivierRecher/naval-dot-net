@@ -26,15 +26,34 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
     public bool IsPlacingFleet => View?.Status == nameof(GameStatusNames.AwaitingFleet);
 
-    public bool CanFire => View is not null && !IsOver && !IsPlacingFleet && View.IsViewerTurn && !IsBusy;
+    public bool IsHotSeat => View?.Mode == nameof(GameModeNames.Local);
 
-    public bool CanRetryBotTurn => View is not null && !IsOver && !IsPlacingFleet && !View.IsViewerTurn && !IsBusy;
+    /// <summary>
+    /// Nom du joueur a qui l'appareil doit etre passe, ou null. En hot-seat, la
+    /// vue suivante decrit deja l'autre joueur — donc sa flotte : tant que cette
+    /// propriete n'est pas nulle, l'interface ne doit rien afficher de la vue.
+    /// C'est une protection d'affichage, pas une protection reseau : la vue est
+    /// deja dans le navigateur. Voir AGENTS.md § 4 et l'ADR 0011.
+    /// </summary>
+    public string? HandoverTo { get; private set; }
 
-    public async Task StartAsync(string playerName, int side, string botDifficulty, string fleetPlacement)
+    public bool IsAwaitingHandover => HandoverTo is not null;
+
+    public bool CanFire => View is not null && !IsOver && !IsPlacingFleet && !IsAwaitingHandover && View.IsViewerTurn && !IsBusy;
+
+    public bool CanRetryBotTurn => View is not null && !IsOver && !IsPlacingFleet && !IsHotSeat && !View.IsViewerTurn && !IsBusy;
+
+    public async Task StartAsync(
+        string playerName,
+        int side,
+        string mode,
+        string botDifficulty,
+        string fleetPlacement,
+        string? opponentName)
     {
         await RunAsync(async () =>
         {
-            var response = await http.PostAsJsonAsync("games", new CreateGameRequest(playerName, side, side, botDifficulty, fleetPlacement));
+            var response = await http.PostAsJsonAsync("games", new CreateGameRequest(playerName, side, side, mode, botDifficulty, fleetPlacement, opponentName));
 
             if (!response.IsSuccessStatusCode)
             {
@@ -44,9 +63,13 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
             View = await response.Content.ReadFromJsonAsync<GameViewResponse>();
 
+            var opponent = IsHotSeat
+                ? "en duel"
+                : $"contre le bot {BotDifficultyCatalog.LabelOf(View?.BotDifficulty)}";
+
             Notice = IsPlacingFleet
-                ? $"Partie créée contre le bot {BotDifficultyCatalog.LabelOf(View?.BotDifficulty)}. Posez votre flotte."
-                : $"Partie créée contre le bot {BotDifficultyCatalog.LabelOf(View?.BotDifficulty)}. À vous de jouer.";
+                ? $"Partie créée {opponent}. {View?.ViewerName} pose sa flotte."
+                : $"Partie créée {opponent}. À {View?.ViewerName} de jouer.";
         });
     }
 
@@ -63,6 +86,11 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
         var gameId = View.GameId;
 
+        // En hot-seat, la vue bascule sur l'autre joueur des le tir resolu : le
+        // nom du tireur doit etre retenu avant, sinon le message s'adresse au
+        // mauvais joueur.
+        var shooter = IsHotSeat ? View.ViewerName : "Vous";
+
         await RunAsync(async () =>
         {
             try
@@ -74,11 +102,18 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
                     Row = row
                 });
 
-                Notice = Describe(outcome.Result, "Vous");
+                Notice = Describe(outcome.Result, shooter);
 
                 if (outcome.GameOver)
                 {
                     await RefreshAsync(gameId);
+                    return;
+                }
+
+                if (IsHotSeat)
+                {
+                    await RefreshAsync(gameId);
+                    RequestHandover();
                     return;
                 }
             }
@@ -139,8 +174,23 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
             }
 
             View = await response.Content.ReadFromJsonAsync<GameViewResponse>();
+
+            if (IsPlacingFleet)
+            {
+                Notice = "Flotte enregistrée.";
+                RequestHandover();
+                return;
+            }
+
             Notice = "Flotte en place. À vous de jouer.";
         });
+    }
+
+    /// <summary>L'appareil a change de mains : la vue peut etre affichee.</summary>
+    public void ConfirmHandover()
+    {
+        HandoverTo = null;
+        OnChange?.Invoke();
     }
 
     /// <summary>Revient a l'ecran de creation sans toucher a la partie cote serveur.</summary>
@@ -149,8 +199,11 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
         View = null;
         Notice = null;
         Failure = null;
+        HandoverTo = null;
         OnChange?.Invoke();
     }
+
+    private void RequestHandover() => HandoverTo = View?.ViewerName;
 
     private async Task PlayBotTurnAsync(Guid gameId)
     {
@@ -173,6 +226,12 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
     private async Task RefreshAsync(Guid gameId) =>
         View = await http.GetFromJsonAsync<GameViewResponse>($"games/{gameId}");
+
+    private enum GameModeNames
+    {
+        Solo,
+        Local
+    }
 
     private async Task RunAsync(Func<Task> action)
     {

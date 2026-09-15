@@ -59,7 +59,7 @@ public class GameRepositorySubstitutionTests(WebApplicationFactory<Program> fact
     {
         var (client, repository) = SubstitutedHost();
 
-        var created = await client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, "HuntTarget", "Random"));
+        var created = await client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, "Solo", "HuntTarget", "Random"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
 
         var view = await created.Content.ReadFromJsonAsync<GameViewResponse>();

@@ -9,7 +9,7 @@ en défaut, ce qui a réellement été observé, et ce qui reste non vérifié.
 
 Binôme : Olivier Recher (@OlivierRecher) · Ulysse (@Oulssyyy)
 
-**État : 6 revues — 2 adaptées, 1 correctif rejeté, 1 conclusion invalidée, 1 défaut invisible aux tests, 1 test qui ne testait pas.**
+**État : 7 revues — 2 adaptées, 1 correctif rejeté, 1 conclusion invalidée, 2 défauts invisibles aux tests, 1 test qui ne testait pas.**
 
 ---
 
@@ -791,3 +791,112 @@ avait raison sur le fond. Le trou existait. Mais la réponse spontanée à une
 remarque juste — écrire le test manquant et le voir passer — reproduit
 exactement le défaut que la remarque signalait, en donnant cette fois
 l'apparence de l'avoir corrigé.
+---
+
+## Revue 7 — « Le domaine savait déjà le faire » suffit-il à livrer une feature ?
+
+**Proposition examinée**
+
+Au début de l'item 4, six tests de domaine décrivant une partie hot-seat ont été
+écrits **avant** toute modification de production. Ils sont passés du premier
+coup : l'agrégat alternait déjà entre deux humains, `ViewForClient()` suivait
+déjà le joueur courant, et l'invariant de l'ADR 0003 tenait déjà.
+
+D'où la proposition, formulée à ce moment-là : le hot-seat est « presque
+livré », il ne reste qu'à laisser l'API créer une partie `Local`.
+
+**Hypothèse à vérifier**
+
+> Quand le domaine porte déjà la règle et que les tests le confirment, ce qui
+> reste à faire est mécanique.
+
+**Expérience**
+
+Écrire la partie API et la partie front, puis **jouer une partie hot-seat dans
+le navigateur** : créer, tirer, passer l'appareil, confirmer, jouer le tour
+suivant.
+
+Résultat attendu, écrit avant exécution : l'écran de passation masque tout,
+puis la vue du second joueur apparaît avec sa propre flotte, différente de la
+première.
+
+Erreur que ce contrôle peut détecter : tout ce qui vit entre la règle et l'écran
+— texte d'interface, état de rendu, séquence d'appels.
+
+**Observation**
+
+Le résultat attendu est bien obtenu, mais **au quatrième essai**. Les trois
+premiers ont chacun révélé un défaut, dont aucun n'était visible dans les 192
+tests verts.
+
+1. **La page ne s'affichait plus du tout.** `NullReferenceException` au rendu.
+   L'écran de passation avait été inséré au milieu d'une chaîne `@if / else if /
+   else` de Razor, et l'insertion l'avait **coupée en deux** : la branche
+   « partie en cours » ne dépendait plus de « la vue existe », donc elle
+   s'exécutait avec une vue nulle. C'est du C# parfaitement valide ; le
+   compilateur n'a rien à dire.
+2. **Le bandeau annonçait « contre le bot Novice »** dans une partie qui n'oppose
+   aucun bot, badge de difficulté compris. Le texte était correct tant qu'un seul
+   mode existait.
+3. **Le message du tir s'adressait au mauvais joueur** : « Vous manquez » affiché
+   à Ulysse pour décrire le tir d'Olivier. En hot-seat, la vue bascule sur
+   l'adversaire dès le tir résolu ; le nom du tireur doit être **capturé avant**
+   l'appel, sinon il est déjà perdu quand le message se compose.
+
+Le troisième est le seul des trois qui soit une vraie erreur de raisonnement, et
+c'est une conséquence directe de la décision de l'ADR 0003 : le serveur change de
+viewer sans que personne le lui demande. Le code d'interface écrit pour le mode
+`Solo` supposait, sans le dire, que « le viewer » et « celui qui vient d'agir »
+sont la même personne. En hot-seat, ils ne le sont jamais.
+
+**Décision et justification**
+
+**Hypothèse rejetée.** « Le domaine savait déjà le faire » était vrai, vérifiable,
+et sans rapport avec ce qui restait à faire. Les six tests passés d'emblée ne
+mesuraient pas l'avancement de la feature : ils mesuraient que la feature
+*précédente* avait bien généralisé.
+
+Ce constat ne dévalue pas ces six tests — ils ont une vraie valeur, celle
+d'établir par exécution une affirmation que l'ADR 0010 s'était contenté de
+formuler, et qui s'était d'ailleurs révélée fausse à la revue de la PR #5. Il
+dévalue l'**inférence** qu'on en a tirée sur le travail restant.
+
+**Preuves et limites**
+
+| | |
+|---|---|
+| Tests domaine écrits avant production | 6, verts sans modification |
+| Défauts trouvés au navigateur | 3, aucun couvert par les 192 tests |
+| Défaut n° 1 | `Play.razor` : chaîne `if/else` coupée, `NullReferenceException` au rendu |
+| Défaut n° 2 | Bandeau et badge parlant d'un bot absent |
+| Défaut n° 3 | Nom du tireur capturé après la bascule de vue |
+| Contrôle final | Création, tir, passation, confirmation, tour du second joueur |
+
+Ce qui **reste non vérifié** :
+
+- Les trois corrections n'ont **aucun test automatisé**, comme tout le front.
+  Une régression identique passerait la CI.
+- La partie hot-seat n'a été jouée que sur quelques tours, jamais jusqu'à la
+  victoire, dans le navigateur. Le domaine, lui, la joue jusqu'au bout dans
+  `ALocalGame_PlaysThroughToAWinner`.
+- Le placement manuel **en hot-seat** — deux joueurs posant chacun leur flotte
+  avec passation entre les deux — est couvert côté serveur par
+  `ALocalGame_WithManualPlacement_AsksEachHumanInTurn`, mais **n'a pas été joué
+  à la main**. C'est la combinaison la moins éprouvée de la livraison.
+
+**Ce que cette revue enseigne pour la suite du projet**
+
+Une feature traverse quatre couches, et une suite de tests qui en couvre deux ne
+dit rien des deux autres. Le raccourci tentant — « le cœur est fait, le reste est
+du branchement » — s'appuie sur la partie visible de la preuve.
+
+La règle retenue, qui prolonge celle de la revue 5 : **le nombre d'essais qu'il
+faut pour jouer la feature à la main est la mesure honnête de ce qui restait à
+faire.** Ici, quatre.
+
+Deuxième enseignement, plus spécifique : quand une décision d'architecture
+déplace une notion — ici, « le viewer » cesse d'être « celui qui vient d'agir » —
+tout le code écrit avant cette décision porte l'ancienne hypothèse sans l'avoir
+écrite nulle part. Le défaut n° 3 n'était pas une faute d'inattention : c'était
+une hypothèse devenue fausse, dans du code que personne n'avait de raison de
+relire.
