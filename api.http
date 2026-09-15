@@ -5,7 +5,7 @@
 POST {{api}}/games
 Content-Type: application/json
 
-{ "playerName": "Olivier", "columns": 10, "rows": 10 }
+{ "playerName": "Olivier", "columns": 10, "rows": 10, "mode": "Solo", "botDifficulty": "HuntTargetParity", "fleetPlacement": "Random" }
 
 ### Lire l'état courant (toujours la vue du joueur humain)
 GET {{api}}/games/{{create.response.body.gameId}}
@@ -26,10 +26,90 @@ Content-Type: application/json
 POST {{api}}/games
 Content-Type: application/json
 
-{ "playerName": "", "columns": 10, "rows": 10 }
+{ "playerName": "", "columns": 10, "rows": 10, "mode": "Solo", "botDifficulty": "HuntTarget", "fleetPlacement": "Random" }
 
 ### Case déjà visée : 409, le tour n'est pas consommé
 POST {{api}}/games/{{create.response.body.gameId}}/shots
 Content-Type: application/json
 
 { "column": 4, "row": 4 }
+
+### Difficulté de bot inconnue : 400 produit par le filtre de validation
+POST {{api}}/games
+Content-Type: application/json
+
+{ "playerName": "Olivier", "columns": 10, "rows": 10, "mode": "Solo", "botDifficulty": "Expert", "fleetPlacement": "Random" }
+
+### Créer une partie à placement manuel : 201, statut AwaitingFleet
+# @name manual
+POST {{api}}/games
+Content-Type: application/json
+
+{ "playerName": "Olivier", "columns": 10, "rows": 10, "mode": "Solo", "botDifficulty": "HuntTarget", "fleetPlacement": "Manual" }
+
+### Poser la flotte : 200, la partie démarre
+PUT {{api}}/games/{{manual.response.body.gameId}}/fleet
+Content-Type: application/json
+
+{ "ships": [
+  { "kind": "Carrier",    "column": 0, "row": 0, "orientation": "Vertical" },
+  { "kind": "Battleship", "column": 2, "row": 0, "orientation": "Vertical" },
+  { "kind": "Cruiser",    "column": 4, "row": 0, "orientation": "Vertical" },
+  { "kind": "Submarine",  "column": 6, "row": 0, "orientation": "Vertical" },
+  { "kind": "Destroyer",  "column": 8, "row": 0, "orientation": "Vertical" }
+] }
+
+### Reposer la flotte : 409, elle est déjà posée
+PUT {{api}}/games/{{manual.response.body.gameId}}/fleet
+Content-Type: application/json
+
+{ "ships": [
+  { "kind": "Carrier",    "column": 0, "row": 0, "orientation": "Vertical" },
+  { "kind": "Battleship", "column": 2, "row": 0, "orientation": "Vertical" },
+  { "kind": "Cruiser",    "column": 4, "row": 0, "orientation": "Vertical" },
+  { "kind": "Submarine",  "column": 6, "row": 0, "orientation": "Vertical" },
+  { "kind": "Destroyer",  "column": 8, "row": 0, "orientation": "Vertical" }
+] }
+
+### Flotte incomplète : 400 produit par le domaine
+PUT {{api}}/games/{{manual.response.body.gameId}}/fleet
+Content-Type: application/json
+
+{ "ships": [ { "kind": "Carrier", "column": 0, "row": 0, "orientation": "Vertical" } ] }
+
+### Type de navire inconnu : 400 produit par le filtre de validation
+PUT {{api}}/games/{{manual.response.body.gameId}}/fleet
+Content-Type: application/json
+
+{ "ships": [ { "kind": "Frigate", "column": 0, "row": 0, "orientation": "Vertical" } ] }
+
+### Créer une partie hot-seat : deux humains sur le même appareil
+# @name duel
+POST {{api}}/games
+Content-Type: application/json
+
+{ "playerName": "Olivier", "columns": 10, "rows": 10, "mode": "Local", "botDifficulty": "Random", "fleetPlacement": "Random", "opponentName": "Ulysse" }
+
+### Tirer : la réponse décrit désormais l'AUTRE joueur, avec sa seule flotte
+POST {{api}}/games/{{duel.response.body.gameId}}/shots
+Content-Type: application/json
+
+{ "column": 0, "row": 0 }
+
+### Faire jouer un bot dans une partie hot-seat : 409, il n'y en a aucun
+POST {{api}}/games/{{duel.response.body.gameId}}/bot-turn
+Content-Type: application/json
+
+{}
+
+### Partie locale sans nom d'adversaire : 400, règle conditionnelle
+POST {{api}}/games
+Content-Type: application/json
+
+{ "playerName": "Olivier", "columns": 10, "rows": 10, "mode": "Local", "botDifficulty": "Random", "fleetPlacement": "Random" }
+
+### Mode de jeu inconnu : 400
+POST {{api}}/games
+Content-Type: application/json
+
+{ "playerName": "Olivier", "columns": 10, "rows": 10, "mode": "Online", "botDifficulty": "Random", "fleetPlacement": "Random" }

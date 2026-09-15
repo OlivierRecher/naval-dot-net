@@ -8,6 +8,8 @@ public readonly record struct ShipView(
 
 public readonly record struct RevealedCell(Coordinates Target, ShotResult Result);
 
+public readonly record struct ShipToPlace(ShipKind Kind, int Size);
+
 /// <summary>
 /// Ce que le viewer — le joueur decrit par la vue — a le droit de voir. Ce
 /// n'est pas toujours le joueur courant : <see cref="Game.ViewForClient"/>
@@ -21,8 +23,11 @@ public sealed record GameView(
     GameMode Mode,
     BoardSize Size,
     string ViewerName,
+    string OpponentName,
     bool IsViewerTurn,
     IReadOnlyList<ShipView> OwnFleet,
     IReadOnlyCollection<Coordinates> ShotsReceived,
     IReadOnlyList<RevealedCell> ShotsFired,
+    BotDifficulty BotDifficulty,
+    IReadOnlyList<ShipToPlace> FleetToPlace,
     string? WinnerName);

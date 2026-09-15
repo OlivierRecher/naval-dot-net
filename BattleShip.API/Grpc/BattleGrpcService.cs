@@ -48,6 +48,9 @@ public sealed class BattleGrpcService(IGameRepository repository) : Battle.Battl
 
     private static Status Refused(FireRejection rejection) => rejection switch
     {
+        FireRejection.FleetNotPlaced => new Status(
+            StatusCode.FailedPrecondition, "La flotte n'est pas encore posée."),
+
         FireRejection.OutsideBoard => new Status(
             StatusCode.InvalidArgument, "La case visée est en dehors de la grille."),
 

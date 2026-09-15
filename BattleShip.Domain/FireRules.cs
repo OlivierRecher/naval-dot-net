@@ -2,6 +2,7 @@ namespace BattleShip.Domain;
 
 public enum FireRejection
 {
+    FleetNotPlaced,
     OutsideBoard,
     AlreadyTargeted,
     GameFinished,
@@ -26,6 +27,11 @@ public static class FireRules
 {
     public static FireRejection? Validate(GameStatus status, Board targetBoard, Coordinates target)
     {
+        if (status is GameStatus.AwaitingFleet)
+        {
+            return FireRejection.FleetNotPlaced;
+        }
+
         if (status is GameStatus.Finished)
         {
             return FireRejection.GameFinished;

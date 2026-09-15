@@ -1,3 +1,4 @@
+using BattleShip.Domain;
 using BattleShip.Models;
 using FluentValidation;
 
@@ -19,6 +20,26 @@ public sealed class CreateGameRequestValidator : AbstractValidator<CreateGameReq
 
         RuleFor(request => request.Rows)
             .InclusiveBetween(MinBoardSide, MaxBoardSide);
+
+        RuleFor(request => request.Mode)
+            .Must(mode => EnumNames<GameMode>.TryParse(mode, out _))
+            .WithMessage($"Mode de jeu inconnu : attendu {string.Join(", ", EnumNames<GameMode>.All)}.");
+
+        // Le nom de l'adversaire n'a de sens qu'en hot-seat. En Solo, l'adversaire
+        // est un bot que le serveur nomme lui-meme.
+        RuleFor(request => request.OpponentName)
+            .NotEmpty()
+            .MaximumLength(40)
+            .When(request => string.Equals(request.Mode, nameof(GameMode.Local), StringComparison.OrdinalIgnoreCase))
+            .WithMessage("Une partie locale oppose deux joueurs : le nom du second est obligatoire.");
+
+        RuleFor(request => request.FleetPlacement)
+            .Must(placement => EnumNames<FleetPlacement>.TryParse(placement, out _))
+            .WithMessage($"Placement de flotte inconnu : attendu {string.Join(", ", EnumNames<FleetPlacement>.All)}.");
+
+        RuleFor(request => request.BotDifficulty)
+            .Must(difficulty => EnumNames<BotDifficulty>.TryParse(difficulty, out _))
+            .WithMessage($"Difficulté de bot inconnue : attendu {string.Join(", ", EnumNames<BotDifficulty>.All)}.");
     }
 }
 
@@ -28,5 +49,27 @@ public sealed class FireRequestValidator : AbstractValidator<FireRequest>
     {
         RuleFor(request => request.Column).GreaterThanOrEqualTo(0);
         RuleFor(request => request.Row).GreaterThanOrEqualTo(0);
+    }
+}
+
+public sealed class PlaceFleetRequestValidator : AbstractValidator<PlaceFleetRequest>
+{
+    public PlaceFleetRequestValidator()
+    {
+        RuleFor(request => request.Ships).NotEmpty();
+
+        RuleForEach(request => request.Ships).ChildRules(ship =>
+        {
+            ship.RuleFor(placement => placement.Kind)
+                .Must(kind => EnumNames<ShipKind>.TryParse(kind, out _))
+                .WithMessage($"Type de navire inconnu : attendu {string.Join(", ", EnumNames<ShipKind>.All)}.");
+
+            ship.RuleFor(placement => placement.Orientation)
+                .Must(orientation => EnumNames<Orientation>.TryParse(orientation, out _))
+                .WithMessage($"Orientation inconnue : attendu {string.Join(", ", EnumNames<Orientation>.All)}.");
+
+            ship.RuleFor(placement => placement.Column).GreaterThanOrEqualTo(0);
+            ship.RuleFor(placement => placement.Row).GreaterThanOrEqualTo(0);
+        });
     }
 }

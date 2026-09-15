@@ -1,8 +1,31 @@
 namespace BattleShip.Models;
 
-public sealed record CreateGameRequest(string PlayerName, int Columns, int Rows);
+/// <summary>
+/// Le niveau du bot voyage en texte et non en énumération : une valeur inconnue
+/// doit produire un 400 de FluentValidation, pas une erreur de désérialisation
+/// avant que le filtre de validation ait pu s'exécuter. Voir ADR 0009.
+/// </summary>
+public sealed record CreateGameRequest(
+    string PlayerName,
+    int Columns,
+    int Rows,
+    string Mode,
+    string BotDifficulty,
+    string FleetPlacement,
+    string? OpponentName = null);
 
 public sealed record FireRequest(int Column, int Row);
+
+public sealed record ShipPlacementDto(string Kind, int Column, int Row, string Orientation);
+
+public sealed record PlaceFleetRequest(IReadOnlyList<ShipPlacementDto> Ships);
+
+/// <summary>
+/// Un navire que le joueur doit encore poser. Le serveur dicte la composition :
+/// le front n'a aucune règle de jeu à connaître, et la flotte personnalisable
+/// (item 6) ne demandera aucun changement côté client.
+/// </summary>
+public sealed record ShipToPlaceDto(string Kind, int Size);
 
 public sealed record CoordinatesDto(int Column, int Row);
 
@@ -25,10 +48,13 @@ public sealed record GameViewResponse(
     int Columns,
     int Rows,
     string ViewerName,
+    string OpponentName,
     bool IsViewerTurn,
     IReadOnlyList<ShipDto> OwnFleet,
     IReadOnlyList<CoordinatesDto> ShotsReceived,
     IReadOnlyList<RevealedCellDto> ShotsFired,
+    string BotDifficulty,
+    IReadOnlyList<ShipToPlaceDto> FleetToPlace,
     string? Winner);
 
 public sealed record ShotOutcomeResponse(
@@ -37,3 +63,27 @@ public sealed record ShotOutcomeResponse(
     bool GameOver,
     string? Winner,
     GameViewResponse View);
+
+/// <summary>
+/// Catalogue des niveaux proposés au joueur. Il vit dans la bibliothèque
+/// partagée parce que c'est l'API qui accepte les noms et le front qui les
+/// propose : le test <c>BotDifficultyEndpointsTests</c> interdit qu'ils divergent de
+/// l'énumération du domaine.
+/// </summary>
+public sealed record BotDifficultyOption(string Name, string Label, string Summary);
+
+public static class BotDifficultyCatalog
+{
+    public static IReadOnlyList<BotDifficultyOption> All { get; } =
+    [
+        new("Random", "Novice", "Tire au hasard sur les cases encore libres."),
+        new("HuntTarget", "Chasseur", "Traque un navire touché jusqu'à le couler."),
+        new("HuntTargetParity", "Vétéran", "Traque, et balaie la grille en damier.")
+    ];
+
+    public static string LabelOf(string? name) =>
+        All.FirstOrDefault(option => option.Name == name)?.Label ?? name ?? string.Empty;
+
+    public static string SummaryOf(string? name) =>
+        All.FirstOrDefault(option => option.Name == name)?.Summary ?? string.Empty;
+}

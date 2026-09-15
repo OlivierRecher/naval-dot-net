@@ -107,11 +107,11 @@ est à rejeter.
 ## 5. Contrat d'API
 
 ```
-POST   /games                 → 201 GameCreated
+POST   /games                 → 201 GameView   (mode, botDifficulty, fleetPlacement)
 GET    /games/{id}            → 200 GameView | 404
 POST   /games/{id}/shots      → 200 ShotOutcome | 400 | 404 | 409
 POST   /games/{id}/bot-turn   → 200 ShotOutcome | 404 | 409
-PUT    /games/{id}/fleet      → 200 | 400 | 409        (placement manuel)
+PUT    /games/{id}/fleet      → 200 GameView | 400 | 404 | 409   (placement manuel)
 ```
 
 - `POST /shots` résout **uniquement le coup du joueur courant**. La riposte du
@@ -120,6 +120,17 @@ PUT    /games/{id}/fleet      → 200 | 400 | 409        (placement manuel)
 - **400** : entrée malformée ou hors grille (produit par FluentValidation).
 - **409** : conflit avec l'état courant — case déjà visée, pas son tour, partie terminée.
 - **404** : partie inconnue.
+- `PUT /fleet` reçoit la **flotte entière**, jamais un navire à la fois : une
+  flotte refusée ne doit pas laisser la grille à moitié remplie. Voir ADR 0010.
+- `POST /games` reçoit le **mode** (`Solo` ou `Local`). `opponentName` n'est
+  exigé qu'en `Local` — en `Solo` l'adversaire est un bot que le serveur nomme
+  lui-même. Voir ADR 0011.
+- `POST /games` reçoit la **difficulté du bot** sous forme de **nom** —
+  `Random`, `HuntTarget` ou `HuntTargetParity`. Un `string` et non
+  l'énumération : un nom inconnu doit produire un 400 de FluentValidation, pas
+  une erreur de désérialisation en amont du filtre. La garantie porte sur les
+  **chaînes** JSON ; un nombre ou un tableau reste refusé par la liaison, avec
+  un 400 de forme différente. Voir ADR 0009.
 
 ### gRPC-Web — opération `Fire`
 
@@ -213,9 +224,9 @@ support est clair : « chaque fonctionnalité livrée doit être intégrée, vé
 et comprise par le binôme. »
 
 1. **Socle** — moteur + API + front + validation + gRPC, partie complète contre un bot aléatoire
-2. **Niveaux de bot** — `Random`, `HuntTarget`, `HuntTargetParity`
-3. **Placement manuel de la flotte** — le placement aléatoire reste offert
-4. **Multijoueur local (hot-seat)** — écran de passation ; le secret reste garanti côté serveur
+2. ~~**Niveaux de bot** — `Random`, `HuntTarget`, `HuntTargetParity`~~ — livré, ADR 0009
+3. ~~**Placement manuel de la flotte** — le placement aléatoire reste offert~~ — livré, ADR 0010
+4. ~~**Multijoueur local (hot-seat)** — écran de passation ; le secret reste garanti côté serveur~~ — livré, ADR 0011
 5. **Persistance + historique + statistiques** — SQLite / EF Core derrière `IGameRepository`
 6. **Personnalisation** — taille de grille, composition de flotte
 7. *(stretch)* Déploiement
@@ -252,6 +263,10 @@ ADR déjà identifiés par le cadrage :
 - `0005` `Fire` en gRPC-Web, reste du contrat en HTTP/JSON
 - `0006` Validation par filtre et intercepteur plutôt qu'appel manuel (écart au support)
 - `0007` Multijoueur local plutôt qu'en ligne
+- `0008` Verrou par partie porté par l'agrégat `Game`
+- `0009` La difficulté du bot est une donnée de la partie, résolue par une fabrique
+- `0010` Le statut `AwaitingFleet` se déduit des grilles, et la flotte est validée en bloc
+- `0011` Le hot-seat est une alternance de vues, et la passation protège l'écran
 
 ### `REVUE-IA.md`
 **Trois revues minimum.** Proposition · hypothèse à vérifier · expérience

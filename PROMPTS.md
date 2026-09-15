@@ -178,3 +178,454 @@ défaut. Le trou était dans le plan de test avant d'être dans le code : une su
 verte ne dit rien des scénarios qu'elle n'instancie pas.
 
 **Commits** : `cd4c4dd` (code et tests), PR #1.
+
+---
+
+## 2026-09-15 — Niveaux de bot : trois difficultés, et la preuve qu'elles se classent
+
+**Outil / modèle** : Claude Code (Opus 5)
+
+**Contexte**
+Item 2 du backlog. Le socle ne connaissait qu'un `RandomBot`, enregistré en
+Singleton sous `IBotStrategy` et injecté tel quel dans `/games/{id}/bot-turn`.
+Ce montage ne survit pas à trois difficultés : un Singleton unique signifie que
+toutes les parties en cours partagent le même adversaire.
+
+Le risque identifié n'était pas d'écrire trois algorithmes — c'est de la
+littérature, la bataille navale est un problème résolu. Il était de livrer trois
+classes différentes dont **rien n'établirait qu'elles sont d'inégale force**.
+Une hiérarchie de difficulté qu'aucune mesure n'appuie est une étiquette, pas une
+fonctionnalité, et le support sanctionne ce qui est livré sans être vérifié.
+
+**Prompt**
+Implémenter les trois difficultés `Random`, `HuntTarget` et `HuntTargetParity` en
+TDD sur le domaine. Poser d'abord la question de mesure : par quel indicateur
+vérifie-t-on qu'une difficulté est réellement supérieure à une autre, et quel
+test échoue si elle cesse de l'être ? Décider ensuite où vit la difficulté et qui
+la résout en stratégie. Vérifier par exécution, pas de mémoire, tout ce qui
+touche au comportement des API .NET.
+
+**Réponse résumée**
+
+L'indicateur retenu est le **nombre de tirs nécessaires pour couler une flotte
+complète**, mesuré par un banc `BotDrill` qui fait tirer une stratégie sur une
+grille sans passer par `Game` — donc sans l'alternance des tours ni la course
+entre les deux joueurs, qui brouilleraient la mesure.
+
+| Difficulté — **code livré**, 100 parties appariées | Tirs moyens |
+|---|---|
+| `Random` | 95,3 |
+| `HuntTarget` | 64,6 |
+| `HuntTargetParity` | 58,7 |
+
+Précision d'environ ±1 tir : ces valeurs portent le classement, pas la décimale.
+Dans `REVUE-IA.md` revue 4, un 64,6 désigne une **autre** variante mesurée sur un
+**autre** échantillon — la table de référence y lève l'ambiguïté.
+
+Décisions structurantes, toutes tracées dans l'ADR 0009 :
+
+| Sujet | Décision |
+|---|---|
+| Où vit la difficulté | Sur `Game`, fixée à la création — pas dans le dépôt, pas transmise par le client |
+| Qui la résout | `IBotStrategyFactory`, Singleton ; légitime car les stratégies sont des fonctions pures de la `GameView` |
+| Type dans le DTO | `string`, pas l'énumération — sinon la désérialisation échoue avant le filtre de validation (ADR 0006) |
+| Validation | Comparaison à la liste des noms, **pas** `Enum.TryParse` |
+| Catalogue des libellés | Dans `Models`, avec un test qui interdit la divergence avec l'énumération du domaine |
+
+**Décision** : acceptée, après deux corrections en cours de route.
+
+1. **Dérive de vocabulaire.** Le code a été écrit `BotLevel` alors que
+   `CONTEXT.md` fixe `BotDifficulty`. `CLAUDE.md` demande explicitement de lire
+   le glossaire *avant* d'écrire du code ; ça n'a pas été fait. Renommé partout,
+   et `CONTEXT.md` a gagné les trois termes que l'implémentation a créés —
+   chasse, traque, damier — plus deux lignes de « mots écartés ». Le filtre de
+   balayage a été renommé `IsOnScanLattice` pour porter le nom du glossaire.
+2. **Une conclusion plus large que la mesure.** Voir `REVUE-IA.md`, revue 4.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 130 tests, 0 échec (87 avant la feature) |
+| Comportement de `Enum.TryParse` sur une valeur hors énumération | `dotnet run --file` : `TryParse("42")` → **True**, `IsDefined` → False ; `TryParse("0")` → Random |
+| 8 mutations, chacune rétablie | Chacune met au moins un test au rouge — table détaillée dans l'ADR 0009 |
+| Écarts entre variantes d'un même algorithme | 4 000 parties appariées, erreur type des différences — voir revue 4 |
+| Partie complète contre chaque difficulté | `ASoloGame_AgainstEveryDifficulty_RunsToAWinner`, 3 cas |
+| Le niveau choisi pilote réellement le tour du bot | Fabrique espionne substituée dans l'hôte de test |
+| Parcours navigateur complet | Préflight CORS 204 → `POST /battleship.Battle/Fire` 200 en gRPC-Web, puis `/bot-turn` et `GET /games/{id}` en HTTP/JSON |
+| Traque observée à l'écran | Le bot `Vétéran` coule un `Battleship` par 4 tirs verticalement consécutifs, puis tire en **J10** — il retourne chasser dès le navire résolu, et J10 est sur le damier : (9 + 9) % 2 = 0 |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- Le damier de `HuntTargetParity` ne peut rien manquer **tant que le plus petit
+  navire occupe deux cases**. Aucun test ne protège cette hypothèse : elle
+  tombera avec la flotte personnalisable (item 6), et le niveau deviendra alors
+  incorrect, pas seulement moins bon.
+- La résolution des navires coulés est **approchée** : le contact entre navires
+  étant autorisé, deux navires alignés et mitoyens se confondent. Aucun test ne
+  construit ce cas — il est décrit, pas couvert.
+- Les bornes d'efficacité sont larges (±10 tirs). Elles détectent l'effondrement
+  d'une difficulté, pas sa dégradation lente.
+- Le sélecteur de difficulté côté Blazor n'a **aucun test automatisé**, comme le
+  reste du front : vérifié à la main dans le navigateur.
+
+**Commits** : branche `feat/difficultes-de-bot`, PR #4.
+
+---
+
+## 2026-09-15 — Traitement de la revue de la PR #4
+
+**Outil / modèle** : Claude Code (Opus 5) · relecteurs : GitHub Copilot code review + une relecture adverse déléguée
+
+**Contexte**
+La PR #4 livrait les trois difficultés. Deux relectures indépendantes ont été
+conduites sans se voir : Copilot sur le diff, et un agent adverse mandaté pour
+trouver des défauts réels dans `HuntTargetBot` — bornes, cases rejouées,
+diagonales, concurrence — avec interdiction de modifier le dépôt.
+
+L'intérêt de l'indépendance est mesurable : **les deux ont trouvé le même défaut
+principal**, ce qu'aucune des deux seule n'aurait établi, et **chacune en a
+trouvé un que l'autre a manqué**.
+
+**Prompt**
+Traiter chaque remarque en séparant le défaut signalé du remède proposé. Ne rien
+écrire dans un livrable noté sans l'avoir vérifié soi-même, y compris les mesures
+rapportées par l'agent — une remarque produite par une IA n'a pas plus d'autorité
+qu'une autre production d'IA.
+
+**Réponse résumée**
+
+| # | Source | Remarque | Traitement |
+|---|---|---|---|
+| 1 | Copilot ×4 **et** adverse | La PR ajoute `Level`/`Niveau` aux mots écartés de `CONTEXT.md` **et** les emploie ~20 fois, dont le message du 400 envoyé au client | Retenue |
+| 2 | Copilot | `ANewGame_WithoutAnExplicitDifficulty_PlaysAtRandom` passe `BotDifficulty.Random` explicitement : il ne teste pas le défaut qu'il nomme | Retenue |
+| 3 | Adverse | L'ADR affirme « la liaison réussit toujours » ; faux pour une valeur JSON non textuelle | Retenue, **vérifiée avant correction** |
+| 4 | Adverse | L'endpoint jetait le booléen de `TryParse` : une difficulté non reconnue serait devenue `Random` en silence | Retenue, **corrigée autrement que suggéré** |
+| 5 | Adverse | Le garde `Math.Max(…, 0)` de `Between` est une branche morte | Retenue |
+| 6 | Adverse | La « limite assumée » de la résolution est le cas majoritaire, pas un cas de bord | Retenue, **vérifiée indépendamment** |
+| 7 | Adverse | `Play.razor` utilise `First` là où `LabelOf` utilise `FirstOrDefault` | Retenue |
+| 8 | Adverse | `damaged` inclut les cases `Sunk` alors que c'est redondant | **Écartée** |
+
+**Décision** : 7 retenues, 1 écartée, 1 corrigée autrement que proposé.
+
+Deux points méritent d'être détaillés.
+
+1. **Le correctif proposé au n° 4 aurait contredit l'ADR 0006.** L'agent
+   proposait un `if (!TryParse(...)) return Problem(400)` dans l'endpoint. Or
+   l'ADR 0006 pose que la validation vit dans un filtre générique, « pas d'appel
+   manuel répété dans chaque endpoint » : ajouter un contrôle manuel aurait
+   défait la décision qu'il trace. Le diagnostic était juste — la dégradation
+   silencieuse est le pire mode de défaillance — mais le remède devait venir
+   d'ailleurs. Retenu à la place : `BotDifficulties.Parse`, qui **lève**. Si le
+   filtre sautait, l'appel échoue bruyamment au lieu de servir un bot dégradé, et
+   aucune validation n'est dupliquée.
+2. **Le n° 8 est écarté.** L'argument est correct : une chaîne de cases touchées
+   reliant une case à un navire coulé n'a jamais besoin de traverser une **autre**
+   case coulée, celle-ci serait un point d'arrivée plus proche et valide. Mais
+   `damaged` signifie « touchée ou coulée » ; restreindre à `Hit` optimiserait la
+   couverture de mutation au prix de la lisibilité du prédicat. Une expression
+   redondante dont la redondance est **démontrable** n'est pas un défaut.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 134 tests, 0 échec (130 avant la revue) |
+| Affirmation n° 3, refaite par sondes HTTP | `"Expert"`, `""`, `null` → `ValidationProblem` ; `2`, `true`, `["HuntTarget"]` → `BadHttpRequestException`, en amont du filtre. **L'agent avait raison** |
+| Affirmation n° 6, refaite avec une sonde posée sur le calcul du bot | **1018 / 2000 = 50,9 %** des parties contiennent au moins une case d'un navire à flot classée coulée — chiffre identique à celui rapporté |
+| Nouveaux tests épinglant ces deux comportements | `CreateGame_WithANonTextualDifficulty_IsRefusedByTheBinderNotTheValidator`, `CreateGame_WithADifficultyInAnotherCase_StoresTheCanonicalName` |
+| Vocabulaire après renommage | `grep -n "level\|Level\|Niveau"` sur les cinq projets : aucune occurrence |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- Le chemin `BotDifficulties.Parse` lève **uniquement si le filtre de validation
+  disparaît**. Aucun test ne l'instancie : c'est une défense en profondeur, pas
+  un comportement couvert.
+- La mesure des 50,9 % a été obtenue avec une sonde **ajoutée puis retirée** du
+  domaine. Elle n'est pas rejouée par `dotnet test` et demande de reposer la
+  sonde pour être reproduite.
+- L'agent adverse rapporte 11 mutations sur 13 détectées par la suite, les deux
+  survivantes étant des branches mortes. Ce chiffre **n'a pas été refait** : il
+  est cité comme une observation de l'agent, pas comme un résultat vérifié.
+
+**Constat de méthode**
+Deux relecteurs indépendants sur le même diff ne coûtent presque rien et ne se
+recouvrent pas : Copilot lit le diff et compare le code à ce que la PR déclare —
+c'est ainsi qu'il a vu que le glossaire ajouté était violé par le code ajouté, et
+que le test du défaut ne testait pas le défaut. L'agent adverse exécute, mesure
+et mute — c'est ainsi qu'il a trouvé une affirmation d'ADR contredite par une
+sonde HTTP. Aucun des deux n'aurait produit les trouvailles de l'autre.
+
+**Commits** : branche `feat/difficultes-de-bot`, PR #4.
+
+---
+
+## 2026-09-15 — Placement manuel de la flotte
+
+**Outil / modèle** : Claude Code (Opus 5)
+
+**Contexte**
+Item 3 du backlog. Le placement manuel introduit une phase qui n'existait pas :
+la partie existe, mais on ne peut pas y tirer. `CONTEXT.md` avait anticipé ce
+troisième statut depuis le cadrage sans décider comment il serait porté.
+
+Le risque identifié était l'**état intermédiaire**. Une flotte se pose en cinq
+navires ; si le serveur accepte les navires un par un, une flotte abandonnée en
+cours de route laisse une grille à moitié remplie, dans un état qu'aucune règle
+du jeu ne décrit et qu'aucun test n'aurait de raison d'instancier.
+
+**Prompt**
+Livrer le placement manuel en TDD sur le domaine, le placement aléatoire restant
+offert. Trancher explicitement deux questions avant de coder : comment la partie
+sait qu'elle attend une flotte, et à quelle granularité la flotte est soumise.
+Pour chaque règle ajoutée, exécuter la mutation qui la casse — et si une mutation
+survit, ne pas ajuster le test après coup mais se demander d'abord si c'est le
+code ou le test qui est de trop.
+
+**Réponse résumée**
+
+| Question | Décision |
+|---|---|
+| Comment la partie sait qu'elle attend | Le statut se **déduit des grilles** : une grille humaine vide *est* l'attente. Pas de drapeau, qui pourrait contredire les grilles |
+| Granularité de la soumission | La **flotte entière** en une requête `PUT`, validée en bloc avant qu'aucune case ne soit posée |
+| Qui dicte la composition | Le serveur : la `GameView` publie `FleetToPlace` — types et longueurs, **aucune position** |
+| Contrat des valeurs nommées | `EnumNames<T>` généralise l'ADR 0009 et sert quatre énumérations ; `BotDifficulties` disparaît |
+
+**Décision** : acceptée. Deux effets non recherchés méritent d'être notés.
+
+1. **Le mode `Local` de l'item 4 est déjà servi.** `BoardAwaitingFleet()` rend la
+   prochaine grille humaine vide ; avec deux humains, chaque `PUT` en remplit
+   une et la partie démarre quand il n'en reste plus. Aucune ligne à ajouter.
+2. **Trois mutations ont survécu au premier passage**, et elles ont changé le
+   code plutôt que les tests. Voir ci-dessous.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 172 tests, 0 échec (134 avant l'item 3) |
+| 9 mutations, chacune rétablie | 6 détectées d'emblée, **3 survivantes** — table complète dans l'ADR 0010 |
+| Survivante 1 — garde `AwaitingFleet` de `FireFromClient` | `FireRules.Validate` refusait déjà : **code mort, supprimé** |
+| Survivante 2 — contrôle de statut dans `PlaceFleetFromClient` | Redondant avec l'absence de grille en attente : **condition simplifiée** |
+| Survivante 3 — garde « jamais la grille d'un bot » | Aucun test ne le distinguait de son absence : **test ajouté** |
+| Mutations rejouées après correction | Les 9 sont détectées |
+| Parcours navigateur | Partie manuelle créée, 5 navires posés, flotte validée, partie jouée jusqu'au tir et à la riposte |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- Le gabarit contrôlé est `FleetTemplate.Standard`, **en dur** dans
+  `Game.PlaceFleetFromClient`. La partie connaît la taille de sa grille mais pas
+  sa flotte ; l'item 6 devra la lui donner.
+- Le contrôle local du navigateur — débordement et chevauchement — n'a **aucun
+  test automatisé**. C'est un confort d'interface ; la garantie est le contrôle
+  serveur, qui lui est testé.
+- Aucun test ne couvre une flotte soumise **pendant** qu'une autre requête la
+  soumet. Le verrou de l'agrégat sérialise les deux, mais rien ne l'atteste ici,
+  contrairement aux tirs concurrents de l'item 1.
+
+**Constat de méthode**
+« Le test passe » et « le test protège » sont deux choses différentes, et la
+seule façon connue de les distinguer est de casser la règle. Sur neuf mutations,
+trois ont révélé du code ou des tests qui ne servaient à rien — soit un tiers.
+Aucun de ces trois défauts n'était visible à la relecture : les deux gardes morts
+paraissaient prudents, et le test tautologique portait le nom exact de
+l'invariant qu'il ne protégeait pas.
+
+**Commits** : branche `feat/placement-manuel`, PR #5.
+
+---
+
+## 2026-09-15 — Traitement de la revue de la PR #5
+
+**Outil / modèle** : Claude Code (Opus 5) · relecteur : GitHub Copilot code review
+
+**Contexte**
+La PR #5 livrait le placement manuel. Copilot a déposé **deux** commentaires, et
+tous deux portaient sur des choses que la PR **affirmait** plutôt que sur du code
+manifestement faux — c'est ce qui rend cette revue instructive.
+
+**Prompt**
+Traiter chaque remarque en séparant le défaut signalé du remède. Vérifier
+soi-même les affirmations avant de corriger. Pour tout test ajouté en réponse,
+exécuter la mutation correspondante avant de le déclarer utile.
+
+**Réponse résumée**
+
+| # | Remarque | Traitement |
+|---|---|---|
+| 1 | En `Local`, `ViewForClient()` sert toujours le joueur courant : après le premier placement, le second joueur reçoit un écran sans rien à poser | Retenue — **l'ADR affirmait le contraire** |
+| 2 | Aucun test ne lance deux `PlaceFleetFromClient` concurrents, alors que les tirs en ont | Retenue — **le premier correctif ne corrigeait rien** |
+
+**Décision** : 2 retenues, dont 1 dont le correctif a dû être refait.
+
+1. **La remarque n° 1 visait une phrase, pas une ligne de code.** L'état décrit
+   est inatteignable aujourd'hui : `POST /games` ne crée que des parties `Solo`.
+   Mais l'ADR 0010 et le corps de la PR affirmaient que « le mode `Local` est
+   déjà servi, aucune ligne à ajouter ». C'était faux, et le relecteur l'a établi
+   en lisant le code plutôt que l'affirmation. Corrigé aux deux endroits :
+   `ViewForClient()` sert désormais, pendant `AwaitingFleet`, le joueur **dont on
+   attend la flotte** ; l'ADR dit ce qui reste à faire à l'item 4.
+2. **La remarque n° 2 a produit un test qui ne testait rien.** Voir
+   `REVUE-IA.md`, revue 6.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 175 tests, 0 échec (172 avant la revue) |
+| Mutation — `ViewForClient` ignore le joueur en attente | 1 test au rouge |
+| Mutation — `PlaceFleetFromClient` sans verrou, **1ʳᵉ** écriture du test | **0 au rouge** — le test ne protégeait rien |
+| Mutation — même mutation, test corrigé | 1 au rouge, le test nommé |
+| Mesure de la course, 10 essais × 64 fils | avec verrou : 1 acceptation, 5 navires. Sans : 2 à 64 acceptations, jusqu'à **18** navires |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- Le mode `Local` n'est **pas livré**. L'agrégat sait le construire et la
+  projection est correcte, mais aucun endpoint ne crée une partie `Local` et il
+  n'existe pas d'écran de passation. C'est l'item 4.
+- Le test de concurrence repose sur un `Thread.Sleep(20)` empirique. Il rend la
+  course reproductible sur cette machine ; aucune propriété ne le fonde.
+- Les tests de concurrence des tirs, écrits à l'item 1, n'ont **pas** été
+  resoumis à ce contrôle.
+
+**Constat de méthode**
+Les deux remarques portaient sur l'écart entre ce que le projet **dit** et ce
+qu'il **fait** : une affirmation d'ADR contredite par le code, et un test absent
+là où la PR affirmait par ailleurs que le verrou protégeait la transition. Un
+relecteur automatique lit le diff sans croire le texte qui l'accompagne — c'est
+précisément là qu'il est le plus utile, et c'est un angle qu'une relecture par
+l'auteur n'a pas.
+
+**Commits** : branche `feat/placement-manuel`, PR #5.
+
+---
+
+## 2026-09-15 — Multijoueur local (hot-seat)
+
+**Outil / modèle** : Claude Code (Opus 5)
+
+**Contexte**
+Item 4 du backlog. L'ADR 0007 avait écarté le multijoueur en ligne au profit du
+hot-seat ; l'ADR 0003 pose que le serveur ne sert qu'une `GameView` à la fois.
+Ces deux décisions se combinent si bien que la difficulté de l'item n'est pas
+l'alternance — l'agrégat la faisait déjà — mais ceci : **dès le tir résolu, le
+serveur sert la vue du joueur suivant, donc sa flotte.** Sur un appareil
+partagé, celui qui vient de tirer regarde encore l'écran.
+
+**Prompt**
+Livrer le hot-seat. Commencer par écrire les tests de domaine **avant** toute
+modification de production, pour établir par exécution ce que l'agrégat sait déjà
+faire — plutôt que de l'affirmer, comme l'ADR 0010 l'avait fait à tort. Puis
+traiter la seule vraie question : qu'est-ce qui empêche un joueur de voir la
+flotte de l'autre, et qu'est-ce que cette protection ne protège pas.
+
+**Réponse résumée**
+
+| Sujet | Décision |
+|---|---|
+| Alternance | Aucune notion nouvelle : `FireLocked` échange les joueurs comme en `Solo` |
+| Protection | Un écran de passation ; tant qu'il est affiché, l'interface ne rend **rien** de la vue |
+| Portée de la protection | Elle protège d'un regard, **pas** d'un adversaire : la vue est déjà dans le navigateur |
+| `opponentName` | Exigé **uniquement** en `Local`, par une règle conditionnelle `.When()` |
+| `botDifficulty` | Exigé dans les deux modes — il a un défaut qui veut dire quelque chose, `opponentName` non |
+
+**Décision** : acceptée. Le point qui compte est le troisième.
+
+La passation ne peut pas être une protection réelle, et l'ADR le dit sans
+détour : la vue du joueur suivant arrive dans le navigateur en réponse au tir,
+avant que l'écran de passation ne s'affiche. Faire confirmer la passation au
+serveur n'y changerait rien — c'est le même client non fiable qui confirmerait.
+Sur un appareil partagé, les données des deux joueurs passent nécessairement par
+le même navigateur.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| 6 tests de domaine écrits **avant** toute production | Verts sans modification — l'agrégat savait déjà jouer à deux humains |
+| `dotnet build` puis `dotnet test` | 192 tests, 0 échec (175 avant l'item) |
+| Invariant du hot-seat | `ASequenceOfShots_NeverServesTwoFleetsAtOnce` : 12 tirs, une seule flotte par réponse, jamais changeante — doublé d'un garde contre deux flottes identiques |
+| 4 mutations, chacune rétablie | Chacune met au moins un test au rouge |
+| Parcours navigateur | Création, tir, passation muette, confirmation, tour du second joueur avec sa propre flotte |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- Le parcours navigateur a demandé **quatre essais** : trois défauts d'interface
+  qu'aucun des 192 tests ne couvrait. Voir `REVUE-IA.md`, revue 7.
+- Le **placement manuel en hot-seat** — deux joueurs posant chacun leur flotte —
+  est couvert côté serveur mais **n'a pas été joué à la main**. C'est la
+  combinaison la moins éprouvée de la livraison.
+- Aucune partie hot-seat n'a été menée jusqu'à la victoire dans le navigateur.
+- Rien n'empêche un joueur de confirmer la passation à la place de l'autre.
+
+**Constat de méthode**
+Écrire les tests de domaine avant la production a produit un résultat qu'on
+n'attendait pas : ils sont tous passés. C'est une information — l'item 3 avait
+correctement généralisé — mais elle ne dit rien du travail restant, et l'avoir
+lue comme un avancement a coûté trois allers-retours au navigateur.
+
+**Commits** : branche `feat/hot-seat`, PR #6.
+
+---
+
+## 2026-09-15 — Traitement de la revue de la PR #6
+
+**Outil / modèle** : Claude Code (Opus 5) · relecteur : GitHub Copilot code review
+
+**Contexte**
+Un seul commentaire, sur `GameSession.FireAsync` : si le rafraîchissement échoue
+après un tir accepté, la passation n'est jamais armée et l'interface revient sur
+la vue périmée du tireur.
+
+**Prompt**
+Vérifier la conséquence annoncée avant de corriger — un relecteur qui décrit
+correctement un défaut peut en décrire incorrectement l'effet.
+
+**Réponse résumée**
+
+**Le diagnostic est juste, la conséquence annoncée est fausse, et la réalité est
+pire.** Copilot écrit que « la partie reste bloquée sur `NotTheClientTurn` ».
+Ce refus n'existe pas en hot-seat : il ne se déclenche que si le joueur courant
+est un **bot**, et une partie `Local` n'en a aucun.
+
+Ce qui se passe réellement : la vue périmée du tireur dit encore « à vous »,
+donc `CanFire` redevient vrai. S'il retire, `Game.FireFromClient` accepte — le
+serveur ne sait pas qui est au clavier, c'est précisément la décision de l'ADR
+0003. **Le premier joueur joue le tour du second sans que rien ne le signale.**
+
+La passation n'est donc pas un confort d'affichage de plus : c'est le **seul
+garde du tour** en hot-seat. Elle ne peut pas dépendre d'un appel qui peut
+échouer.
+
+Correction : la passation est armée **dès le tir accepté**, avant le
+rafraîchissement. Pour cela la `GameView` publie le **nom de l'adversaire** —
+un nom, jamais une position, et que le joueur connaît déjà. Confirmer est refusé
+tant que la vue suivante n'est pas arrivée : confirmer sur une vue périmée
+afficherait la flotte du joueur *précédent*. L'écran propose de réessayer.
+
+**Décision** : diagnostic retenu, conséquence corrigée, correctif étendu.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 195 tests, 0 échec (192 avant la revue) |
+| Mutation — la vue nomme le viewer au lieu de l'adversaire | 2 tests domaine + 1 test API au rouge |
+| Parcours navigateur après correction | Création, tir, passation, confirmation — inchangé |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- **Le chemin d'échec qui motive la correction n'a pas été déclenché.** Il
+  faudrait couper le réseau entre deux appels consécutifs du navigateur. La
+  correction est établie par lecture, pas par expérience.
+- Aucun test ne couvre `GameSession` : c'est la zone que `AGENTS.md` § 8 laisse
+  hors périmètre. Un `HttpMessageHandler` de test la rendrait accessible, et
+  c'est exactement ce qu'il faudrait pour éprouver ce chemin.
+
+**Constat de méthode**
+Une remarque peut être juste sur le défaut et fausse sur ses conséquences.
+Recopier la conséquence annoncée aurait produit un correctif correct et une
+justification erronée — donc une ligne d'ADR indéfendable à l'oral. Le défaut
+méritait d'être vérifié dans le domaine, pas seulement dans le fichier signalé.
+
+**Commits** : branche `feat/hot-seat`, PR #6.

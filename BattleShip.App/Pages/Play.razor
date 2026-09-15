@@ -24,16 +24,159 @@
     <div class="card p-3 setup">
         <h2 class="h5">Nouvelle partie</h2>
 
+        <label class="form-label" for="mode">Adversaire</label>
+        <select id="mode" class="form-select mb-3" @bind="_mode">
+            <option value="Solo">Un bot</option>
+            <option value="Local">Un second joueur, sur cet appareil</option>
+        </select>
+
         <label class="form-label" for="player">Votre nom</label>
         <input id="player" class="form-control mb-3" @bind="_playerName" />
 
+        @if (_mode == "Local")
+        {
+            <label class="form-label" for="opponent">Nom du second joueur</label>
+            <input id="opponent" class="form-control mb-3" @bind="_opponentName" />
+        }
+
         <label class="form-label" for="side">Taille de la grille</label>
         <input id="side" type="number" min="8" max="20" class="form-control mb-3" @bind="_side" />
+
+        @if (_mode == "Solo")
+        {
+        <label class="form-label" for="difficulty">Difficulté du bot</label>
+        <select id="difficulty" class="form-select" @bind="_botDifficulty">
+            @foreach (var option in BotDifficultyCatalog.All)
+            {
+                <option value="@option.Name">@option.Label</option>
+            }
+        </select>
+        <p class="form-text mb-3">@BotDifficultyCatalog.SummaryOf(_botDifficulty)</p>
+        }
+
+        <label class="form-label" for="placement">Placement de votre flotte</label>
+        <select id="placement" class="form-select mb-3" @bind="_fleetPlacement">
+            <option value="Random">Aléatoire — le serveur pose la flotte</option>
+            <option value="Manual">Manuel — vous posez chaque navire</option>
+        </select>
 
         <button class="btn btn-primary" @onclick="StartAsync" disabled="@Session.IsBusy">
             @(Session.IsBusy ? "Création…" : "Lancer la partie")
         </button>
     </div>
+}
+else if (Session.IsAwaitingHandover)
+{
+    <div class="card p-4 setup text-center">
+        <h2 class="h4">Passez l'appareil</h2>
+        <p class="lead mb-1">Au tour de <strong>@Session.HandoverTo</strong>.</p>
+        @if (Session.Notice is not null)
+        {
+            <p class="text-muted">@Session.Notice</p>
+        }
+        <p class="form-text">
+            Rien n'est affiché tant que vous n'avez pas confirmé : l'écran suivant montre
+            la flotte de @Session.HandoverTo.
+        </p>
+        @if (Session.IsHandoverReady)
+        {
+            <button class="btn btn-primary mt-2" @onclick="ConfirmHandover">
+                Je suis @Session.HandoverTo, afficher mon tour
+            </button>
+        }
+        else
+        {
+            <p class="text-danger">L'état de la partie n'a pas pu être récupéré ; rien ne peut être affiché sans lui.</p>
+            <button class="btn btn-outline-danger mt-2" disabled="@Session.IsBusy" @onclick="RetryHandoverAsync">
+                @(Session.IsBusy ? "Récupération…" : "Réessayer")
+            </button>
+        }
+    </div>
+}
+else if (Session.IsPlacingFleet)
+{
+    <div class="status alert alert-secondary" role="status">
+        <strong>Posez votre flotte.</strong>
+        <span> @_placed.Count / @Session.View.FleetToPlace.Count navires placés.</span>
+        @if (Session.Notice is not null)
+        {
+            <span> @Session.Notice</span>
+        }
+    </div>
+
+    <div class="boards">
+        <section>
+            <h2 class="h6">Votre grille</h2>
+            <div class="grid" style="--columns: @Session.View.Columns">
+                @for (var row = 0; row < Session.View.Rows; row++)
+                {
+                    for (var column = 0; column < Session.View.Columns; column++)
+                    {
+                        // `column` et `row` sont les variables de la boucle for : les
+                        // capturer dans le lambda les ferait toutes valoir leur valeur
+                        // finale. La copie locale est ce qui lie chaque bouton a sa case.
+                        var cell = new CoordinatesDto(column, row);
+
+                        <button type="button"
+                                class="cell @(_takenCells.Contains(cell) ? "cell-ship" : "cell-empty")"
+                                disabled="@(Session.IsBusy || NextShip is null)"
+                                title="@Label(cell)"
+                                @onclick="() => PlaceAt(cell)">
+                        </button>
+                    }
+                }
+            </div>
+        </section>
+
+        <section>
+            <h2 class="h6">Flotte à poser</h2>
+
+            @if (NextShip is { } next)
+            {
+                <p>Navire courant : <strong>@next.Kind</strong> — @next.Size cases.</p>
+
+                <div class="btn-group mb-3" role="group">
+                    <button type="button"
+                            class="btn btn-sm @(_orientation == "Horizontal" ? "btn-primary" : "btn-outline-primary")"
+                            @onclick='() => _orientation = "Horizontal"'>Horizontal</button>
+                    <button type="button"
+                            class="btn btn-sm @(_orientation == "Vertical" ? "btn-primary" : "btn-outline-primary")"
+                            @onclick='() => _orientation = "Vertical"'>Vertical</button>
+                </div>
+
+                <p class="form-text">Cliquez la case de départ : elle sera l'extrémité haute ou gauche du navire.</p>
+            }
+            else
+            {
+                <p>Tous les navires sont posés.</p>
+            }
+
+            <ul class="fleet">
+                @foreach (var ship in Session.View.FleetToPlace.Select((ship, index) => (ship, index)))
+                {
+                    <li class="@(ship.index < _placed.Count ? "sunk" : null)">
+                        @ship.ship.Kind — @ship.ship.Size cases
+                    </li>
+                }
+            </ul>
+
+            <div class="mt-3">
+                <button class="btn btn-primary"
+                        disabled="@(NextShip is not null || Session.IsBusy)"
+                        @onclick="ConfirmFleetAsync">
+                    @(Session.IsBusy ? "Envoi…" : "Valider la flotte")
+                </button>
+                <button class="btn btn-outline-secondary ms-2" disabled="@(_placed.Count is 0)" @onclick="UndoLastShip">
+                    Retirer le dernier
+                </button>
+                <button class="btn btn-outline-secondary ms-2" disabled="@(_placed.Count is 0)" @onclick="ClearFleet">
+                    Tout effacer
+                </button>
+            </div>
+        </section>
+    </div>
+
+    <button class="btn btn-outline-secondary mt-3" @onclick="Reset">Abandonner cette partie</button>
 }
 else
 {
@@ -44,7 +187,11 @@ else
         }
         else
         {
-            <strong>@(Session.View.IsViewerTurn ? "À vous de jouer." : "Le bot joue…")</strong>
+            <strong>@(Session.View.IsViewerTurn ? $"Au tour de {Session.View.ViewerName}." : "Le bot joue…")</strong>
+            @if (!Session.IsHotSeat)
+            {
+                <span class="badge text-bg-dark ms-1">@BotDifficultyCatalog.LabelOf(Session.View.BotDifficulty)</span>
+            }
         }
         @if (Session.Notice is not null)
         {
@@ -104,6 +251,69 @@ else
 @code {
     private string _playerName = "Joueur";
     private int _side = 10;
+    private string _botDifficulty = BotDifficultyCatalog.All[0].Name;
+    private string _fleetPlacement = "Random";
+    private string _mode = "Solo";
+    private string _opponentName = "Ulysse";
+    private string _orientation = "Horizontal";
+    private readonly List<ShipPlacementDto> _placed = [];
+    private HashSet<CoordinatesDto> _takenCells = [];
+
+    private ShipToPlaceDto? NextShip =>
+        Session.View is { } view && _placed.Count < view.FleetToPlace.Count
+            ? view.FleetToPlace[_placed.Count]
+            : null;
+
+    /// <summary>
+    /// Refuse localement ce que le serveur refuserait, pour éviter un
+    /// aller-retour par navire. Le serveur revalide la flotte entière : ce
+    /// contrôle est un confort d'interface, pas la garantie.
+    /// </summary>
+    private void PlaceAt(CoordinatesDto origin)
+    {
+        if (Session.View is not { } view || NextShip is not { } ship)
+        {
+            return;
+        }
+
+        var cells = CellsOf(origin.Column, origin.Row, ship.Size, _orientation);
+
+        if (cells.Any(cell => cell.Column >= view.Columns || cell.Row >= view.Rows) ||
+            cells.Any(_takenCells.Contains))
+        {
+            return;
+        }
+
+        _placed.Add(new ShipPlacementDto(ship.Kind, origin.Column, origin.Row, _orientation));
+        RecomputeTakenCells();
+    }
+
+    private static List<CoordinatesDto> CellsOf(int column, int row, int size, string orientation) =>
+        [.. Enumerable.Range(0, size).Select(offset => orientation == "Horizontal"
+            ? new CoordinatesDto(column + offset, row)
+            : new CoordinatesDto(column, row + offset))];
+
+    private void RecomputeTakenCells() =>
+        _takenCells = [.. _placed.SelectMany(ship => CellsOf(
+            ship.Column,
+            ship.Row,
+            Session.View!.FleetToPlace.First(candidate => candidate.Kind == ship.Kind).Size,
+            ship.Orientation))];
+
+    private void UndoLastShip()
+    {
+        _placed.RemoveAt(_placed.Count - 1);
+        RecomputeTakenCells();
+    }
+
+    private void ClearFleet()
+    {
+        _placed.Clear();
+        RecomputeTakenCells();
+    }
+
+    private async Task ConfirmFleetAsync() => await Session.PlaceFleetAsync(_placed);
+
 
     private Dictionary<CoordinatesDto, string> _fired = [];
     private HashSet<CoordinatesDto> _ownShipCells = [];
@@ -142,7 +352,21 @@ else
         _incoming = [.. view.ShotsReceived];
     }
 
-    private async Task StartAsync() => await Session.StartAsync(_playerName, _side);
+    private async Task StartAsync()
+    {
+        ClearFleet();
+        await Session.StartAsync(_playerName, _side, _mode, _botDifficulty, _fleetPlacement,
+            _mode == "Local" ? _opponentName : null);
+    }
+
+    /// <summary>La flotte posee appartient au joueur precedent : l'ecran suivant repart de zero.</summary>
+    private void ConfirmHandover()
+    {
+        ClearFleet();
+        Session.ConfirmHandover();
+    }
+
+    private async Task RetryHandoverAsync() => await Session.RetryHandoverAsync();
 
     private async Task FireAsync(CoordinatesDto target) => await Session.FireAsync(target.Column, target.Row);
 
@@ -151,6 +375,7 @@ else
     private void Reset()
     {
         Session.Forget();
+        ClearFleet();
         Project();
     }
 
