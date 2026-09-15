@@ -82,11 +82,20 @@ BattleShip.Tests    xUnit        → Domain, API   (dossiers Domain/ et Api/)
 - Les vérifications de règles sont des **fonctions pures**, testables sans instancier une partie.
 - Stockage : `ConcurrentDictionary<Guid, Game>` derrière **`IGameRepository`**,
   enregistré en **Singleton**. L'interface est le point de bascule vers SQLite ; aucun endpoint ne doit changer le jour où on bascule.
+- Le dictionnaire concurrent protège la **table**, pas la partie qu'elle contient.
+  L'agrégat `Game` porte son propre verrou et sérialise ses transitions et ses
+  projections. Voir ADR 0008.
 
 ### Secret des positions — invariant structurel
 
 **Le client ne transmet jamais d'identité de joueur.** Le serveur renvoie
-toujours la `GameView` du **joueur dont c'est le tour**, et rien d'autre.
+toujours la `GameView` du **viewer** qu'il choisit lui-même, et rien d'autre :
+le joueur dont c'est le tour, sauf si ce joueur est un bot — un bot n'a pas de
+client, lui servir sa vue publierait sa flotte. Voir ADR 0003 et `CONTEXT.md`.
+
+Symétriquement, le client ne **joue** jamais le tour d'un bot : `FireFromClient`
+le refuse, `PlayBotTurn` est le seul chemin par lequel le serveur fait tirer un
+bot.
 
 C'est délibéré : l'invariant devient impossible à violer plutôt que « vérifié ».
 L'écran de passation du mode `Local` est un confort d'affichage, pas la

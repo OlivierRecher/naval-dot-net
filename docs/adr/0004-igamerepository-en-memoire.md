@@ -48,6 +48,9 @@ L'anticipation est ici justifiée par un fait, pas par un principe : l'item 5 es
   raison du `ConcurrentDictionary` plutôt qu'un `Dictionary` : deux requêtes HTTP
   concurrentes touchent la même instance. Point à savoir expliquer — les durées
   de vie de l'injection de dépendances font partie des sujets du QCM.
+  **Précision apportée après la revue de la PR #1** : le dictionnaire concurrent
+  protège la table, pas la partie qu'elle contient. La protection de l'agrégat
+  lui-même fait l'objet de l'ADR 0008.
 - `Domain` ne doit pas pour autant gagner de dépendance : l'interface ne
   manipule que des types du domaine, jamais `DbContext` ni `IQueryable`.
 
