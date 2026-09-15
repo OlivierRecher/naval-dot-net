@@ -32,9 +32,21 @@ Status = first.Board.Ships.Count is 0 || second.Board.Ships.Count is 0
     : GameStatus.InProgress;
 ```
 
-Conséquence agréable et non recherchée : le mode `Local` de l'item 4, où deux
-humains posent chacun leur flotte, ne demandera aucun changement. Chaque `PUT`
-remplit la prochaine grille vide, et la partie démarre quand il n'en reste plus.
+Conséquence non recherchée : le mode `Local` de l'item 4, où deux humains posent
+chacun leur flotte, est **partiellement** servi. Chaque `PUT` remplit la
+prochaine grille vide et la partie démarre quand il n'en reste plus.
+
+> **Correction apportée par la revue de la PR #5.** Cet ADR affirmait d'abord que
+> le mode `Local` était servi « sans aucune ligne à ajouter ». C'était faux :
+> `ViewForClient()` servait toujours le joueur courant, donc après le placement
+> du premier joueur le second recevait un écran de placement **sans rien à
+> poser** et sans moyen d'avancer. Le défaut était inatteignable — l'API ne crée
+> que des parties `Solo` — mais l'affirmation, elle, était publiée. Corrigé :
+> pendant `AwaitingFleet`, la vue servie décrit le joueur **dont on attend la
+> flotte**, pas le joueur courant.
+
+Ce qui reste à l'item 4 : que l'API sache créer une partie `Local`, et l'écran de
+passation entre les deux joueurs.
 
 ### Le client ne pose jamais la flotte d'un bot
 `BoardAwaitingFleet()` écarte explicitement les joueurs `IsBot`. Le serveur
@@ -88,6 +100,10 @@ par `409`, pas dupliquée.
   chevauchement pour éviter un aller-retour par navire. C'est un **confort
   d'interface** : la garantie est le contrôle serveur, et aucun test automatisé
   ne couvre le contrôle local.
+- La soumission de flotte est sérialisée par le verrou de l'agrégat (ADR 0008),
+  et un test l'atteste désormais. Sans verrou, la mesure montre de 2 à 64
+  soumissions acceptées et jusqu'à **18 navires** sur une grille qui n'en admet
+  que cinq — deux soumissions entrelacées posent chacune la leur.
 
 ## Vérification et réexamen
 
@@ -115,6 +131,16 @@ parce que la grille du bot n'est jamais vide. Le test affirmait protéger un
 invariant de l'ADR 0003 et ne protégeait rien. Le test ajouté construit l'état
 dégénéré — bot sans flotte, humain avec — qui est le seul à discriminer.
 
+Deux mutations supplémentaires, ajoutées après la revue de la PR #5 :
+
+| Mutation | Test au rouge |
+|---|---|
+| `ViewForClient` ignore le joueur en attente | `ViewForClient_WhenTheFirstOfTwoHumansHasPlaced_DescribesTheSecond` |
+| `PlaceFleetFromClient` sans verrou | `PlaceFleetFromClient_CalledConcurrently_AcceptsExactlyOneFleet` |
+
+La seconde n'a mordu qu'après correction **du test** : dans sa première écriture,
+il passait sans verrou. Voir `REVUE-IA.md`, revue 6.
+
 **Vérification navigateur** : partie créée en placement manuel, cinq navires
 posés, flotte validée, partie jouée. Elle a révélé un défaut qu'aucun des 172
 tests ne pouvait voir — voir `REVUE-IA.md`, revue 5.
@@ -125,4 +151,4 @@ de flotte configurable, qui doit sortir du code en dur).
 ## Références
 - ADR 0003 (serveur autoritaire), ADR 0006 (validation par filtre), ADR 0009 (nom plutôt qu'énumération)
 - `AGENTS.md` § 4, § 5, § 10 item 3 · `CONTEXT.md`
-- `REVUE-IA.md`, revue 5
+- `REVUE-IA.md`, revues 5 et 6

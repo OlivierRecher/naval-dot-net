@@ -131,10 +131,12 @@ public sealed class Game
     {
         lock (_gate)
         {
-            if (BoardAwaitingFleet() is not { } board)
+            if (PlayerAwaitingFleet() is not { } placer)
             {
                 return FleetOutcome.Rejected(FleetRejection.FleetAlreadyPlaced);
             }
+
+            var board = placer.Board;
 
             if (FleetPlacementRules.Validate(board.Size, FleetTemplate.Standard, placements) is { } rejection)
             {
@@ -146,7 +148,7 @@ public sealed class Game
                 board.Place(placement);
             }
 
-            if (BoardAwaitingFleet() is null)
+            if (PlayerAwaitingFleet() is null)
             {
                 Status = GameStatus.InProgress;
             }
@@ -163,6 +165,15 @@ public sealed class Game
     {
         lock (_gate)
         {
+            // Pendant le placement, le viewer n'est pas le joueur courant mais
+            // celui dont on attend la flotte : c'est lui qui est devant l'ecran.
+            // Sans cela, en mode Local, le second joueur recevrait une vue du
+            // premier, sans rien a poser et sans moyen d'avancer.
+            if (Status is GameStatus.AwaitingFleet && PlayerAwaitingFleet() is { } placer)
+            {
+                return ViewLocked(placer);
+            }
+
             return ViewLocked(_current.IsBot ? _waiting : _current);
         }
     }
@@ -176,13 +187,13 @@ public sealed class Game
     }
 
     /// <summary>
-    /// La grille d'un bot n'est jamais servie au client, meme vide : le serveur
-    /// remplit celle du bot lui-meme. Voir ADR 0003.
+    /// Le prochain humain dont on attend la flotte. Un bot n'y figure jamais :
+    /// le serveur remplit sa grille lui-meme, donc le client ne peut pas la
+    /// poser a sa place. Voir ADR 0003.
     /// </summary>
-    private Board? BoardAwaitingFleet() =>
+    private Player? PlayerAwaitingFleet() =>
         new[] { _current, _waiting }
-            .FirstOrDefault(player => !player.IsBot && player.Board.Ships.Count is 0)
-            ?.Board;
+            .FirstOrDefault(player => !player.IsBot && player.Board.Ships.Count is 0);
 
     private FireOutcome FireLocked(Coordinates target)
     {

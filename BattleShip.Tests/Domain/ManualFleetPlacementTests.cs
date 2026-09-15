@@ -167,4 +167,85 @@ public class ManualFleetPlacementTests
         Assert.Equal(GameStatus.Finished, game.Status);
         Assert.NotNull(game.Winner);
     }
+
+    /// <summary>
+    /// Remarque de la revue de la PR #5. En mode <c>Local</c>, une fois la
+    /// première flotte posée, la vue servie doit décrire le <b>second</b> joueur :
+    /// sinon il reçoit un écran de placement sans rien à poser, et la partie est
+    /// bloquée. Le mode n'est pas encore créable par l'API — c'est l'item 4 —
+    /// mais l'agrégat, lui, le construit déjà.
+    /// </summary>
+    [Fact]
+    public void ViewForClient_WhenTheFirstOfTwoHumansHasPlaced_DescribesTheSecond()
+    {
+        var first = new Player("Olivier", isBot: false, new Board(BoardSize.Standard));
+        var second = new Player("Ulysse", isBot: false, new Board(BoardSize.Standard));
+        var game = new Game(GameMode.Local, first, second);
+
+        Assert.Equal("Olivier", game.ViewForClient().ViewerName);
+        Assert.Equal(5, game.ViewForClient().FleetToPlace.Count);
+
+        game.PlaceFleetFromClient(ValidFleet());
+
+        var view = game.ViewForClient();
+        Assert.Equal(GameStatus.AwaitingFleet, game.Status);
+        Assert.Equal("Ulysse", view.ViewerName);
+        Assert.Equal(5, view.FleetToPlace.Count);
+        Assert.Empty(view.OwnFleet);
+    }
+
+    [Fact]
+    public void PlaceFleetFromClient_WhenBothHumansHavePlaced_StartsTheGame()
+    {
+        var first = new Player("Olivier", isBot: false, new Board(BoardSize.Standard));
+        var second = new Player("Ulysse", isBot: false, new Board(BoardSize.Standard));
+        var game = new Game(GameMode.Local, first, second);
+
+        game.PlaceFleetFromClient(ValidFleet());
+        game.PlaceFleetFromClient(ValidFleet());
+
+        Assert.Equal(GameStatus.InProgress, game.Status);
+        Assert.Equal("Olivier", game.ViewForClient().ViewerName);
+        Assert.Empty(game.ViewForClient().FleetToPlace);
+    }
+
+    /// <summary>
+    /// Remarque de la revue de la PR #5. Le verrou de l'agrégat doit sérialiser
+    /// les soumissions comme il sérialise les tirs : une seule flotte acceptée,
+    /// et jamais de grille à moitié remplie par deux soumissions entrelacées.
+    /// </summary>
+    [Fact]
+    public void PlaceFleetFromClient_CalledConcurrently_AcceptsExactlyOneFleet()
+    {
+        var game = AwaitingFleetGame();
+        var accepted = 0;
+
+        // Les fils partent sur un signal commun, et le signal attend qu'ils
+        // soient tous gares dessus. Sans cette attente, les premiers fils
+        // terminent pendant que les derniers sont encore crees : la course ne se
+        // produit jamais et le test passe meme sans verrou — verifie.
+        using var start = new ManualResetEventSlim(false);
+
+        var threads = Enumerable.Range(0, 64).Select(_ => new Thread(() =>
+        {
+            start.Wait();
+
+            if (game.PlaceFleetFromClient(ValidFleet()).IsAccepted)
+            {
+                Interlocked.Increment(ref accepted);
+            }
+        })).ToList();
+
+        threads.ForEach(thread => thread.Start());
+        Thread.Sleep(20);
+        start.Set();
+        threads.ForEach(thread => thread.Join());
+
+        Assert.Equal(1, accepted);
+        Assert.Equal(GameStatus.InProgress, game.Status);
+
+        // Sans verrou, la grille recoit jusqu'a 18 navires : deux soumissions
+        // entrelacees posent chacune les leurs.
+        Assert.Equal(5, game.ViewForClient().OwnFleet.Count);
+    }
 }

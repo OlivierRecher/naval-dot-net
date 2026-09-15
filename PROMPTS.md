@@ -432,3 +432,68 @@ paraissaient prudents, et le test tautologique portait le nom exact de
 l'invariant qu'il ne protégeait pas.
 
 **Commits** : branche `feat/placement-manuel`, PR #5.
+
+---
+
+## 2026-09-15 — Traitement de la revue de la PR #5
+
+**Outil / modèle** : Claude Code (Opus 5) · relecteur : GitHub Copilot code review
+
+**Contexte**
+La PR #5 livrait le placement manuel. Copilot a déposé **deux** commentaires, et
+tous deux portaient sur des choses que la PR **affirmait** plutôt que sur du code
+manifestement faux — c'est ce qui rend cette revue instructive.
+
+**Prompt**
+Traiter chaque remarque en séparant le défaut signalé du remède. Vérifier
+soi-même les affirmations avant de corriger. Pour tout test ajouté en réponse,
+exécuter la mutation correspondante avant de le déclarer utile.
+
+**Réponse résumée**
+
+| # | Remarque | Traitement |
+|---|---|---|
+| 1 | En `Local`, `ViewForClient()` sert toujours le joueur courant : après le premier placement, le second joueur reçoit un écran sans rien à poser | Retenue — **l'ADR affirmait le contraire** |
+| 2 | Aucun test ne lance deux `PlaceFleetFromClient` concurrents, alors que les tirs en ont | Retenue — **le premier correctif ne corrigeait rien** |
+
+**Décision** : 2 retenues, dont 1 dont le correctif a dû être refait.
+
+1. **La remarque n° 1 visait une phrase, pas une ligne de code.** L'état décrit
+   est inatteignable aujourd'hui : `POST /games` ne crée que des parties `Solo`.
+   Mais l'ADR 0010 et le corps de la PR affirmaient que « le mode `Local` est
+   déjà servi, aucune ligne à ajouter ». C'était faux, et le relecteur l'a établi
+   en lisant le code plutôt que l'affirmation. Corrigé aux deux endroits :
+   `ViewForClient()` sert désormais, pendant `AwaitingFleet`, le joueur **dont on
+   attend la flotte** ; l'ADR dit ce qui reste à faire à l'item 4.
+2. **La remarque n° 2 a produit un test qui ne testait rien.** Voir
+   `REVUE-IA.md`, revue 6.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 175 tests, 0 échec (172 avant la revue) |
+| Mutation — `ViewForClient` ignore le joueur en attente | 1 test au rouge |
+| Mutation — `PlaceFleetFromClient` sans verrou, **1ʳᵉ** écriture du test | **0 au rouge** — le test ne protégeait rien |
+| Mutation — même mutation, test corrigé | 1 au rouge, le test nommé |
+| Mesure de la course, 10 essais × 64 fils | avec verrou : 1 acceptation, 5 navires. Sans : 2 à 64 acceptations, jusqu'à **18** navires |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- Le mode `Local` n'est **pas livré**. L'agrégat sait le construire et la
+  projection est correcte, mais aucun endpoint ne crée une partie `Local` et il
+  n'existe pas d'écran de passation. C'est l'item 4.
+- Le test de concurrence repose sur un `Thread.Sleep(20)` empirique. Il rend la
+  course reproductible sur cette machine ; aucune propriété ne le fonde.
+- Les tests de concurrence des tirs, écrits à l'item 1, n'ont **pas** été
+  resoumis à ce contrôle.
+
+**Constat de méthode**
+Les deux remarques portaient sur l'écart entre ce que le projet **dit** et ce
+qu'il **fait** : une affirmation d'ADR contredite par le code, et un test absent
+là où la PR affirmait par ailleurs que le verrou protégeait la transition. Un
+relecteur automatique lit le diff sans croire le texte qui l'accompagne — c'est
+précisément là qu'il est le plus utile, et c'est un angle qu'une relecture par
+l'auteur n'a pas.
+
+**Commits** : branche `feat/placement-manuel`, PR #5.

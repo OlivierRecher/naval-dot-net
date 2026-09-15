@@ -9,7 +9,7 @@ en défaut, ce qui a réellement été observé, et ce qui reste non vérifié.
 
 Binôme : Olivier Recher (@OlivierRecher) · Ulysse (@Oulssyyy)
 
-**État : 5 revues — 2 adaptées, 1 correctif rejeté, 1 conclusion invalidée, 1 défaut qu'aucun test ne pouvait voir.**
+**État : 6 revues — 2 adaptées, 1 correctif rejeté, 1 conclusion invalidée, 1 défaut invisible aux tests, 1 test qui ne testait pas.**
 
 ---
 
@@ -664,3 +664,130 @@ Corollaire pour l'item 4 (hot-seat) et l'item 6 (flotte personnalisable), qui
 ajouteront tous deux du code de composant : le contrôle navigateur n'est pas la
 dernière étape de confort une fois les tests verts, c'est la vérification
 principale de cette partie-là du code.
+---
+
+## Revue 6 — Un test de concurrence qui passe prouve-t-il qu'il y a un verrou ?
+
+**Proposition examinée**
+
+La revue Copilot de la PR #5 relève, justement, qu'aucun test ne lance deux
+soumissions de flotte simultanées, alors que `GameConcurrencyTests` le fait pour
+les tirs depuis l'item 1. Le test écrit en réponse :
+
+```csharp
+var accepted = 0;
+
+Parallel.For(0, 64, _ =>
+{
+    if (game.PlaceFleetFromClient(ValidFleet()).IsAccepted)
+    {
+        Interlocked.Increment(ref accepted);
+    }
+});
+
+Assert.Equal(1, accepted);
+```
+
+Il passait. Le trou signalé par la revue paraissait comblé.
+
+**Hypothèse à vérifier**
+
+> Ce test échoue si le verrou de `PlaceFleetFromClient` disparaît.
+
+C'est la seule chose qui distingue un test de concurrence d'un test qui se
+contente de ne pas planter. La formulation vient de `CLAUDE.md` : « pour chaque
+nouveau test de règle, casser volontairement la règle, montrer le test au rouge,
+rétablir ».
+
+**Expérience**
+
+Remplacer `lock (_gate)` par `if (true)` dans `PlaceFleetFromClient`, exécuter.
+
+Résultat attendu, écrit avant exécution : sans verrou, plusieurs fils franchissent
+le contrôle « une grille attend-elle une flotte ? » avant qu'aucun n'ait posé de
+navire ; le test doit donc compter plus d'une acceptation et virer au rouge.
+
+**Observation**
+
+```
+base (avec verrou)     : 0/14 au rouge
+mutation (sans verrou) : 0/14 au rouge
+```
+
+**Le test passait sans verrou.** Il n'attestait rien.
+
+La cause n'est pas dans le code testé mais dans la façon de lancer les fils.
+`Parallel.For` démarre ses itérations progressivement : la première soumission —
+quelques microsecondes — se termine avant que la deuxième ne commence. La course
+ne se produisait jamais, donc le test ne pouvait pas la voir.
+
+Une première correction, un `ManualResetEventSlim` sur lequel les fils attendent
+un signal commun, **n'a pas suffi** : les premiers fils partaient pendant que les
+derniers étaient encore créés. Il a fallu attendre explicitement que tous soient
+garés sur le signal avant de le lever.
+
+Avec 64 fils réellement synchronisés, l'effet est massif et reproductible :
+
+| | acceptations | navires sur la grille |
+|---|---|---|
+| avec verrou | 1, dix fois sur dix | 5 |
+| sans verrou | 2 à 64 | 5 à **18** |
+
+Dix-huit navires sur une grille qui en admet cinq : deux soumissions entrelacées
+posent chacune la leur, et `Board.Place` refuse silencieusement les
+chevauchements sans que `PlaceFleetFromClient` regarde son retour.
+
+**Décision et justification**
+
+**Diagnostic de la revue accepté, premier correctif rejeté, deuxième adopté.**
+
+La remarque de Copilot était juste et le trou réel. Le test écrit en réponse ne
+le comblait pas : il documentait une intention. Seule la mutation l'a montré —
+aucune relecture ne l'aurait fait, puisque le code du test *décrit* exactement ce
+qu'il prétend faire.
+
+Le test corrigé lance 64 fils, attend qu'ils soient tous en attente, puis les
+libère ensemble. Il vérifie deux choses au lieu d'une : une seule acceptation, et
+cinq navires — la seconde assertion attrape la corruption même si la première
+passait par chance.
+
+**Preuves et limites**
+
+| | |
+|---|---|
+| Mutation avant correction | `lock` retiré → 0 / 14 au rouge |
+| Mutation après correction | `lock` retiré → 1 / 14 au rouge, le test nommé |
+| Mesure de la course | 10 essais, 64 fils : 2 à 64 acceptations, jusqu'à 18 navires |
+| Remarque d'origine | PR #5, fil `PRRT_kwDOUbgUe86igkd4` |
+
+Ce qui **reste non vérifié** :
+
+- Le test **n'établit pas l'absence de course**, il en attrape l'occurrence —
+  même réserve que l'ADR 0008 pour les tirs. Il échoue systématiquement sur cette
+  machine quand le verrou saute ; rien ne garantit qu'il le ferait sur une
+  machine à un seul cœur.
+- Le `Thread.Sleep(20)` avant le signal est un délai empirique, pas une garantie
+  de synchronisation. Il a été choisi parce qu'il rend la course reproductible
+  ici, pas parce qu'une propriété le fonde.
+- Les tests de concurrence des tirs, écrits à l'item 1, **n'ont pas été soumis à
+  ce contrôle** : ils utilisent `Parallel.ForEach` et leur mutation avait bien
+  mordu à l'époque. Rien ne dit qu'ils mordraient encore sur une machine plus
+  rapide.
+
+**Ce que cette revue enseigne pour la suite du projet**
+
+Un test de concurrence est le seul type de test dont la réussite peut venir de ce
+qu'il n'a pas fait le travail. Un test fonctionnel qui n'exerce rien échoue en
+général sur une assertion ; un test de concurrence qui n'a pas produit de course
+observe un état parfaitement valide et passe.
+
+La règle retenue : **un test de concurrence n'est pas écrit tant que la mutation
+correspondante n'a pas été exécutée.** Pour les autres tests, la mutation confirme
+ce qu'on croit déjà ; pour ceux-là, elle est la seule chose qui distingue un test
+d'un commentaire.
+
+Corollaire : cette revue est née d'une remarque d'un relecteur automatique qui
+avait raison sur le fond. Le trou existait. Mais la réponse spontanée à une
+remarque juste — écrire le test manquant et le voir passer — reproduit
+exactement le défaut que la remarque signalait, en donnant cette fois
+l'apparence de l'avoir corrigé.
