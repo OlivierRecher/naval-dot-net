@@ -276,8 +276,12 @@ else
 
     <div class="mt-3 d-flex flex-wrap gap-2">
         <button class="btn btn-outline-secondary" @onclick="Reset">Nouvelle partie</button>
+        @* CanFire, et pas seulement « un tir a été joué » : hors tour ou partie
+           terminée, le serveur refuserait avant même de regarder la case, et la
+           démonstration montrerait NotTheClientTurn ou GameFinished au lieu du
+           AlreadyTargeted annoncé. *@
         <button class="btn btn-outline-info"
-                disabled="@(Session.IsBusy || Session.View.ShotsFired.Count is 0)"
+                disabled="@(!Session.CanFire || Session.View.ShotsFired.Count is 0)"
                 @onclick="DemonstrateGrpcRefusalAsync">
             Démontrer l'erreur gRPC-Web
         </button>

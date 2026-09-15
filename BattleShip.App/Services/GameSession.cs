@@ -73,6 +73,9 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
     {
         await RunAsync(async () =>
         {
+            // Le refus demontre appartient a la partie ou il a ete obtenu.
+            GrpcRefusal = null;
+
             var response = await http.PostAsJsonAsync("games", new CreateGameRequest(playerName, side, side, mode, botDifficulty, fleetPlacement, opponentName, fleet));
 
             if (!response.IsSuccessStatusCode)
@@ -254,7 +257,11 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
                 GrpcRefusal = "Le serveur a accepté ce tir — c'est une anomalie : la case avait déjà été visée.";
             }
-            catch (RpcException error)
+            // Seul le refus attendu est interprete. Une panne de transport —
+            // Unavailable, par exemple — doit remonter a RunAsync, qui la
+            // presente comme un echec reseau et laisse reessayer ; la traiter
+            // ici la deguiserait en demonstration reussie.
+            catch (RpcException error) when (error.StatusCode is StatusCode.FailedPrecondition)
             {
                 GrpcRefusal =
                     $"gRPC-Web a refusé le tir en {(char)('A' + alreadyFired.Column)}{alreadyFired.Row + 1} — " +
@@ -320,6 +327,7 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
         Notice = null;
         Failure = null;
         HandoverTo = null;
+        GrpcRefusal = null;
         OnChange?.Invoke();
     }
 
