@@ -439,4 +439,58 @@ public class PersistenceTests : IDisposable
         Assert.Equal(3, reloaded.ViewForClient().OwnFleet.Count);
         Assert.Equal([3, 1, 1], reloaded.ViewForClient().Fleet.Select(ship => ship.Size).ToList());
     }
+
+    /// <summary>
+    /// Remarque de la revue de la PR #8. <c>EnsureCreated</c> crée un schéma
+    /// absent, il ne modifie jamais un schéma existant : une base créée avant
+    /// l'item 6 n'a pas la colonne <c>Fleet</c>, et la première écriture échoue
+    /// sur « no column named Fleet ». Ce test reconstitue cette base en retirant
+    /// la colonne, puis vérifie que la mise à niveau la rattrape et que les
+    /// parties d'avant se relisent avec la flotte classique.
+    /// </summary>
+    [Fact]
+    public void ADatabaseCreatedBeforeTheFleetColumn_IsUpgradedInPlace()
+    {
+        using var db = NewContext();
+        db.Database.ExecuteSqlRaw("ALTER TABLE \"Games\" DROP COLUMN \"Fleet\";");
+
+        var broken = Assert.ThrowsAny<Exception>(() => AfterRestart().Add(NewGame()));
+        Assert.Contains("Fleet", broken.InnerException?.Message ?? broken.Message);
+
+        using (var upgrading = NewContext())
+        {
+            SchemaUpgrade.Apply(upgrading);
+        }
+
+        var game = NewGame();
+        var repository = AfterRestart();
+        repository.Add(game);
+        game.FireFromClient(new Coordinates(0, 0));
+        repository.Save(game);
+
+        var reloaded = AfterRestart().Find(game.Id);
+
+        Assert.NotNull(reloaded);
+        Assert.Single(reloaded.Shots);
+    }
+
+    /// <summary>
+    /// Une partie écrite avant la colonne n'a pas de composition stockée : elle
+    /// doit se relire avec la flotte classique, pas échouer.
+    /// </summary>
+    [Fact]
+    public void AGameStoredWithoutAFleet_ReadsBackWithTheClassicOne()
+    {
+        var game = NewGame();
+        AfterRestart().Add(game);
+
+        using (var db = NewContext())
+        {
+            db.Database.ExecuteSqlRaw("UPDATE \"Games\" SET \"Fleet\" = '';");
+        }
+
+        var reloaded = AfterRestart().Find(game.Id);
+
+        Assert.Equal(FleetTemplate.Standard, reloaded!.Fleet);
+    }
 }

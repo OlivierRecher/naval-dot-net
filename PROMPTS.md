@@ -841,3 +841,66 @@ différence que la règle introduit. Le test d'API vérifie désormais la **form
 la réponse.
 
 **Commits** : branche `feat/personnalisation`, PR #8.
+
+---
+
+## 2026-09-15 — Traitement de la revue de la PR #8
+
+**Outil / modèle** : Claude Code (Opus 5) · relecteur : GitHub Copilot code review
+
+**Contexte**
+Huit commentaires sur le dernier item. Trois portaient sur des **tests qui ne
+testaient pas ce qu'ils annonçaient**, ce qui est devenu le motif récurrent de ce
+projet.
+
+**Réponse résumée**
+
+| # | Remarque | Traitement |
+|---|---|---|
+| 1 | `EnsureCreated` ne modifie pas un schéma existant : la colonne `Fleet` casse toute base antérieure | Retenue — la plus sérieuse |
+| 2 | Le test de densité ne construit pas la flotte la plus dense acceptée | Retenue |
+| 3 | Le test du damier à une case n'exclut pas un pas de 3 | Retenue |
+| 4 | Le README ne suit pas l'item 6 | Retenue |
+| 5 | Les compteurs de flotte n'ont pas de nom accessible | Retenue |
+| 6 | La classe de test s'appelle encore `ScanLattice`, le domaine dit `ScanStride` | Retenue |
+| 7 | Le glossaire dit qu'un navire occupe « plusieurs cases », or la vedette en occupe une | Retenue |
+
+**Décision** : 8 retenues sur 8.
+
+La première **falsifie une affirmation de l'ADR 0012** — « le périmètre ne
+comporte aucune évolution de schéma à rejouer » — un item après qu'elle a été
+écrite. Voir `REVUE-IA.md`, revue 10.
+
+La septième est la plus révélatrice du fonctionnement de ce dépôt : en ajoutant
+la vedette, l'item a rendu **fausse une phrase du glossaire** qu'il n'avait pas
+touchée. Aucun test ne pouvait le voir ; un relecteur qui lit le diff contre la
+documentation, si.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 248 tests, 0 échec (246 avant la revue) |
+| Défaut n° 1 reproduit | `ALTER TABLE Games DROP COLUMN Fleet` puis écriture → « table Games has no column named Fleet » |
+| Mutation — mise à niveau de schéma retirée | 1 test au rouge |
+| Mutation — pas du damier forcé à 3 | 2 tests au rouge — ce que l'ancien test ne détectait pas |
+| Mutation — plafond de densité relevé | 1 test au rouge |
+| Compatibilité amont | Une partie écrite sans composition se relit avec la flotte classique |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- La mise à niveau ne sait qu'**ajouter des colonnes**. Seule l'ADR 0013 dit que
+  toute autre évolution demandera des migrations ; rien dans le code ne l'empêche.
+- Le test reconstitue l'ancien schéma en **supprimant** une colonne d'une base
+  neuve, ce qui n'est pas exactement une base produite par la version précédente.
+- L'accessibilité n'est vérifiée que par la présence des `aria-label` : aucun
+  lecteur d'écran n'a été essayé.
+
+**Constat de méthode**
+Trois des huit remarques portaient sur des tests, et aucune sur un défaut du code
+testé. Le motif est constant depuis la revue 2 : ce qui échappe le plus
+facilement, ce n'est pas le code, c'est **l'écart entre ce qu'un test affirme
+protéger et ce qu'il protège réellement**. Un test porte un nom, une
+documentation, une intention — et rien de tout cela n'est exécuté.
+
+**Commits** : branche `feat/personnalisation`, PR #8.

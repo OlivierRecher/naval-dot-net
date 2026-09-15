@@ -8,7 +8,7 @@ namespace BattleShip.Tests.Domain;
 /// deux. Avec une flotte personnalisable, ce n'est plus acquis — le pas du
 /// balayage doit se déduire de la flotte réellement en jeu.
 /// </summary>
-public class ScanLatticeTests
+public class ScanStrideTests
 {
     private static readonly BoardSize Size = BoardSize.Standard;
 
@@ -22,7 +22,7 @@ public class ScanLatticeTests
             .Select(seed => new HuntTargetParityBot(new Random(seed)).ChooseTarget(ViewWith(fleet), Size))];
 
     [Fact]
-    public void WithTheStandardFleet_TheLatticeIsOneCellOutOfTwo()
+    public void WithTheStandardFleet_TheStrideIsOneCellOutOfTwo()
     {
         var chosen = ChoicesOverManySeeds(FleetTemplate.Standard);
 
@@ -33,13 +33,22 @@ public class ScanLatticeTests
     /// <summary>
     /// Le cas que l'ADR 0009 annonçait comme rendant le niveau <b>incorrect</b>.
     /// Avec un navire d'une seule case, aucune maille ne peut être sautée.
+    ///
+    /// Constater une seule case de parité impaire ne suffirait pas : un pas de 3
+    /// en produirait aussi. Ce qui discrimine est le <b>nombre de cases
+    /// atteignables</b> — un pas de 2 en laisse 50 sur une grille 10 × 10, un pas
+    /// de 3 en laisse 34, un pas de 1 les laisse toutes.
     /// </summary>
     [Fact]
-    public void WithAOneCellShip_TheLatticeCoversEveryCell()
+    public void WithAOneCellShip_TheStrideCoversEveryCell()
     {
-        var chosen = ChoicesOverManySeeds([ShipKind.Carrier, ShipKind.PatrolBoat]);
+        var chosen = Enumerable.Range(1, 2_000)
+            .Select(seed => new HuntTargetParityBot(new Random(seed))
+                .ChooseTarget(ViewWith([ShipKind.Carrier, ShipKind.PatrolBoat]), Size))
+            .Distinct()
+            .ToList();
 
-        Assert.Contains(chosen, cell => (cell.Column + cell.Row) % 2 is 1);
+        Assert.Equal(Size.Columns * Size.Rows, chosen.Count);
     }
 
     /// <summary>
@@ -50,7 +59,7 @@ public class ScanLatticeTests
     [InlineData(3)]
     [InlineData(4)]
     [InlineData(5)]
-    public void WithOnlyLargeShips_TheLatticeWidensToTheSmallestOne(int smallest)
+    public void WithOnlyLargeShips_TheStrideWidensToTheSmallestOne(int smallest)
     {
         IReadOnlyList<ShipKind> fleet = smallest switch
         {
@@ -69,7 +78,7 @@ public class ScanLatticeTests
     /// voisines, qui ne sont jamais sur la même maille.
     /// </summary>
     [Fact]
-    public void WhileTracking_TheLatticeIsIgnoredWhateverTheFleet()
+    public void WhileTracking_TheStrideIsIgnoredWhateverTheFleet()
     {
         var view = new GameView(
             Guid.Empty, GameStatus.InProgress, GameMode.Solo, Size, "Bot", "Humain", true,
@@ -88,10 +97,13 @@ public class ScanLatticeTests
     /// balayage complet qu'un balayage qui manque un navire.
     /// </summary>
     [Fact]
-    public void WithoutAnyFleetInformation_TheLatticeCoversEveryCell()
+    public void WithoutAnyFleetInformation_TheStrideCoversEveryCell()
     {
-        var chosen = ChoicesOverManySeeds([]);
+        var chosen = Enumerable.Range(1, 2_000)
+            .Select(seed => new HuntTargetParityBot(new Random(seed)).ChooseTarget(ViewWith([]), Size))
+            .Distinct()
+            .ToList();
 
-        Assert.Contains(chosen, cell => (cell.Column + cell.Row) % 2 is 1);
+        Assert.Equal(Size.Columns * Size.Rows, chosen.Count);
     }
 }

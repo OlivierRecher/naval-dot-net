@@ -9,7 +9,7 @@ en défaut, ce qui a réellement été observé, et ce qui reste non vérifié.
 
 Binôme : Olivier Recher (@OlivierRecher) · Ulysse (@Oulssyyy)
 
-**État : 9 revues — 2 adaptées, 1 correctif rejeté, 1 conclusion invalidée, 2 défauts invisibles aux tests, 2 fois des tests qui ne testaient pas, 1 limite annoncée puis soldée.**
+**État : 10 revues — 2 adaptées, 1 correctif rejeté, 2 conclusions invalidées, 2 défauts invisibles aux tests, 2 fois des tests qui ne testaient pas, 1 limite annoncée puis soldée.**
 
 ---
 
@@ -1132,3 +1132,109 @@ incorrect » a produit un test, un type, et une généralisation.
 Deuxième enseignement : la correction d'une limite est souvent une
 généralisation, pas une rustine. Le code d'origine n'était pas faux — il était le
 cas particulier d'une règle qu'on n'avait pas écrite.
+---
+
+## Revue 10 — « Aucune évolution de schéma à rejouer » : combien de temps ?
+
+**Proposition examinée**
+
+L'ADR 0012, rédigé à l'item 5, justifie l'absence de migrations :
+
+> Pas de migrations : le schéma est créé au démarrage s'il manque
+> (`EnsureCreated`). **Le périmètre ne comporte aucune évolution de schéma à
+> rejouer**, et une migration vide serait un rituel sans objet.
+
+L'argument est économique et raisonnable : adopter l'outillage des migrations
+pour un schéma qui ne bougera pas, c'est du cérémonial. Il repose entièrement sur
+une prédiction — « le périmètre ne comporte aucune évolution ».
+
+**Hypothèse à vérifier**
+
+> Le schéma de ce projet n'évoluera plus.
+
+**Expérience**
+
+L'item 6 ajoute une colonne `Fleet` à la table `Games`. Créer une base **avant**
+cette colonne, la mettre à jour du code, et essayer d'écrire une partie.
+
+Résultat attendu, écrit avant exécution : si l'hypothèse tient, l'écriture passe.
+Si elle ne tient pas, SQLite refuse une colonne qu'il ne connaît pas.
+
+**Observation**
+
+```
+Microsoft.Data.Sqlite.SqliteException : SQLite Error 1:
+  'table Games has no column named Fleet'.
+```
+
+L'hypothèse est fausse, et elle l'est devenue **à l'item suivant**. La prédiction
+n'a pas tenu un item.
+
+Le détail qui compte : `EnsureCreated` ne signale rien. Il regarde si la base
+existe, la trouve, et ne fait rien de plus. Le schéma périmé ne devient visible
+qu'à la première écriture — c'est-à-dire chez l'utilisateur, pas au démarrage.
+
+Une nuance à la décharge de l'ADR 0012 : la remarque de la revue affirmait aussi
+que « le repli `FleetFrom` ne peut pas s'exécuter, la lecture du schéma échouant
+d'abord ». C'est exact pour l'**écriture**, qui échoue en effet avant tout repli.
+Pour la **lecture** d'une partie écrite avant la colonne, en revanche, le repli
+fonctionne parfaitement une fois la colonne ajoutée avec une valeur vide : `Fleet`
+vide signifie « flotte par défaut », ce qui est exactement ce qu'elle était. Les
+deux cas sont couverts par deux tests distincts.
+
+**Décision et justification**
+
+**Hypothèse rejetée, décision conservée, portée corrigée.**
+
+`SchemaUpgrade.Apply` crée le schéma s'il manque **puis** ajoute les colonnes
+apparues depuis, en interrogeant `pragma_table_info`. Idempotent, et
+volontairement minimal : une liste de colonnes et un `ALTER TABLE`.
+
+Le choix de ne pas adopter les migrations est **maintenu**, mais il change de
+nature. Il n'est plus fondé sur « le schéma ne bougera pas » — cette affirmation
+est morte — mais sur « la seule évolution à ce jour est un ajout de colonne, et
+un ajout de colonne se rattrape en six lignes ». L'ADR 0013 nomme désormais le
+seuil : **au premier changement qui ne soit pas un ajout de colonne — renommage,
+contrainte, table scindée — il faudra passer aux migrations.**
+
+C'est une différence importante. Une justification par prédiction se périme en
+silence ; une justification par condition dit quand elle cesse de valoir.
+
+**Preuves et limites**
+
+| | |
+|---|---|
+| Prédiction examinée | ADR 0012, item 5 |
+| Durée de vie | Un item |
+| Défaut reproduit | `ALTER TABLE Games DROP COLUMN Fleet`, puis écriture → `SqliteException` |
+| Correction | `SchemaUpgrade.Apply`, colonnes ajoutées via `pragma_table_info` |
+| Mutation | Mise à niveau retirée → 1 test au rouge |
+| Compatibilité amont | Une partie sans composition stockée se relit avec la flotte classique |
+
+Ce qui **reste non vérifié** :
+
+- La mise à niveau ne sait qu'**ajouter des colonnes**. Aucun autre type
+  d'évolution n'est couvert, et rien dans le code n'empêche quelqu'un d'en
+  tenter une — seul l'ADR le dit.
+- Le test reconstitue l'ancien schéma en **supprimant** la colonne d'une base
+  neuve. Ce n'est pas rigoureusement la même chose qu'une base réellement créée
+  par la version précédente ; l'ordre des colonnes diffère, par exemple.
+- Aucun test ne couvre une base **corrompue** ou partiellement mise à niveau —
+  par exemple une interruption entre deux `ALTER TABLE`.
+
+**Ce que cette revue enseigne pour la suite du projet**
+
+Deux décisions de ce projet reposaient sur une prédiction : l'ADR 0004 promettait
+qu'aucun endpoint ne changerait à la bascule vers SQLite, l'ADR 0012 que le
+schéma n'évoluerait pas. **Les deux ont été prises en défaut par l'item suivant**,
+et dans les deux cas la décision de fond est restée bonne — c'est sa
+justification qui était trop large.
+
+La règle retenue : **justifier par une condition, pas par une prédiction.** « Le
+schéma ne bougera pas » ne se vérifie qu'en échouant ; « tant que les évolutions
+sont des ajouts de colonne » se vérifie à chaque changement, et dit de lui-même
+quand il faut réexaminer.
+
+Corollaire pratique : `EnsureCreated` est silencieux sur un schéma périmé. Une
+opération qui ne peut pas signaler qu'elle n'a rien fait est un mauvais endroit
+pour déposer une hypothèse.

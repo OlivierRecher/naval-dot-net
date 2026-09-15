@@ -60,10 +60,12 @@
             {
                 <li class="d-flex align-items-center gap-2 mb-1">
                     <button type="button" class="btn btn-sm btn-outline-secondary"
+                            aria-label="Retirer un @ship.Label"
                             disabled="@(_fleet.GetValueOrDefault(ship.Name) is 0)"
                             @onclick="() => Adjust(ship.Name, -1)">−</button>
                     <span class="badge text-bg-light">@_fleet.GetValueOrDefault(ship.Name)</span>
                     <button type="button" class="btn btn-sm btn-outline-secondary"
+                            aria-label="Ajouter un @ship.Label"
                             @onclick="() => Adjust(ship.Name, 1)">+</button>
                     <span>@ship.Label — @ship.Size case@(ship.Size > 1 ? "s" : "")</span>
                 </li>

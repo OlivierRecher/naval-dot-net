@@ -49,7 +49,7 @@ balayage.
 | Français | Identifiant | Définition |
 |---|---|---|
 | Flotte | `Fleet` | L'ensemble des navires d'un joueur. |
-| Navire | `Ship` | Une pièce occupant plusieurs cases contiguës en ligne droite. |
+| Navire | `Ship` | Une pièce occupant **une ou plusieurs** cases contiguës en ligne droite. La `Vedette` n'en occupe qu'une : c'est elle qui force le damier du bot `Vétéran` à couvrir toute la grille. Voir ADR 0013. |
 | Type de navire | `ShipKind` | `Carrier` (5), `Battleship` (4), `Cruiser` (3), `Submarine` (3), `Destroyer` (2), `PatrolBoat` (1). La longueur est attachée au type : on choisit combien de navires de quels types, pas des longueurs libres. |
 | Composition | `Fleet` | Les types de navires en jeu, répétitions comprises. Identique pour les deux joueurs, fixée à la création. Publique : elle est annoncée, et elle ne dit rien des positions. |
 | Orientation | `Orientation` | `Horizontal` ou `Vertical`. Aucune diagonale. |

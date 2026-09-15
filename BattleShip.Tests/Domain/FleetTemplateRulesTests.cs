@@ -46,13 +46,25 @@ public class FleetTemplateRulesTests
         var budget = (int)(size.Columns * size.Rows * FleetTemplateRules.MaxOccupancy);
 
         var fleet = new List<ShipKind>();
-        while (fleet.Sum(kind => kind.Size()) + 5 <= budget && fleet.Count < FleetTemplateRules.MaxShips)
+
+        // Les gros navires d'abord, puis le budget restant comble par le plus
+        // petit : sans cela la flotte s'arrete sous le plafond et le test
+        // n'eprouve pas la borne qu'il pretend eprouver.
+        foreach (var kind in new[] { ShipKind.Carrier, ShipKind.PatrolBoat })
         {
-            fleet.Add(ShipKind.Carrier);
+            while (fleet.Sum(ship => ship.Size()) + kind.Size() <= budget
+                   && fleet.Count < FleetTemplateRules.MaxShips)
+            {
+                fleet.Add(kind);
+            }
         }
 
         Assert.Null(FleetTemplateRules.Validate(size, fleet));
-        Assert.True(fleet.Count >= 4, $"flotte trop petite pour éprouver le plafond : {fleet.Count} navires");
+
+        // Un navire de plus, si petit soit-il, doit franchir le plafond.
+        Assert.Equal(
+            FleetTemplateError.TooDense,
+            FleetTemplateRules.Validate(size, [.. fleet, ShipKind.PatrolBoat]));
 
         for (var seed = 1; seed <= 200; seed++)
         {

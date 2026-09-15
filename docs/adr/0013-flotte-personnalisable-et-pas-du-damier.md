@@ -83,6 +83,27 @@ information **publique par construction** : elle est annoncée à la création e
 les deux joueurs partagent la même. Elle ne dit rien des positions, donc elle ne
 touche pas l'invariant de l'ADR 0003.
 
+## Décision 4 — le schéma se met à niveau, il ne se recrée pas
+
+Ajoutée par la revue de la PR #8. La colonne `Fleet` est la **première évolution
+de schéma du projet**, et elle falsifie une affirmation de l'ADR 0012 : « le
+périmètre ne comporte aucune évolution de schéma à rejouer ». `EnsureCreated`
+crée un schéma absent, il ne modifie jamais un schéma existant — une base créée
+avant cet item échouait sur « table Games has no column named Fleet ».
+
+`SchemaUpgrade.Apply` crée le schéma s'il manque **puis** ajoute les colonnes
+apparues depuis, en interrogeant `pragma_table_info`. C'est idempotent, et c'est
+volontairement minimal : une liste de colonnes et un `ALTER TABLE`.
+
+Ce n'est pas une solution durable, et l'ADR le dit plutôt que de le taire : **au
+prochain changement de schéma qui ne soit pas un simple ajout de colonne — un
+renommage, une contrainte, une table scindée — il faudra passer aux migrations
+EF.** Le coût évité ici est celui d'un outillage supplémentaire pour une seule
+colonne ; il ne se représentera pas.
+
+Une partie écrite avant la colonne se relit avec la flotte classique : `Fleet`
+vide signifie « flotte par défaut », ce qui est exactement ce qu'elle était.
+
 ## Conséquences
 - `ShipKind` gagne `PatrolBoat`, une case. Il n'a d'autre raison d'être que de
   rendre le cas d'une case **atteignable** : sans lui, la limite de l'ADR 0009
@@ -97,6 +118,8 @@ touche pas l'invariant de l'ADR 0003.
 - **Limite assumée** : les longueurs restent attachées aux types. On choisit
   *combien* de navires de *quels types*, pas des longueurs arbitraires. Inventer
   un type par longueur aurait fait un enum sans fin.
+- **Limite assumée** : la mise à niveau de schéma ne sait qu'**ajouter des
+  colonnes**. Toute autre évolution demandera des migrations.
 - **Limite assumée** : le plafond d'un tiers est vérifié sur la plus petite
   grille (8 × 8). Il est plus conservateur sur les grandes, où le placement
   aléatoire réussit à densité supérieure.
@@ -121,6 +144,9 @@ de domaine : une flotte impossible finit aussi en 400 quand le placement
 aléatoire épuise ses essais, si bien que le statut seul ne distinguait pas le
 refus déterministe du refus par hasard. Le test d'API vérifie désormais la
 **forme** de la réponse — un `ValidationProblem` et non un `Problem` nu.
+
+Trois mutations de plus après la revue de la PR #8, toutes détectées : mise à
+niveau de schéma retirée, pas du damier forcé à 3, plafond de densité relevé.
 
 À réexaminer si les longueurs devaient devenir libres, ou si le placement
 aléatoire était remplacé par un algorithme déterministe : le plafond de densité

@@ -131,8 +131,12 @@ CI=true dotnet build && CI=true dotnet test
   **64,6** en `HuntTarget`, **58,7** en `HuntTargetParity`. Ces valeurs ont une
   précision d'environ ±1 tir ; elles portent le classement, pas la décimale.
 - **Placement de la flotte au choix** : aléatoire par le serveur, ou **manuel**,
-  navire par navire. La flotte classique — porte-avions 5, cuirassé 4, croiseur 3,
-  sous-marin 3, torpilleur 2 — sur une grille de 8×8 à 20×20.
+  navire par navire.
+- **Composition de flotte personnalisable** : combien de navires de quels types,
+  parmi porte-avions 5, cuirassé 4, croiseur 3, sous-marin 3, torpilleur 2 et
+  vedette 1 — sur une grille de 8×8 à 20×20. La flotte classique reste le défaut.
+  Le bot `Vétéran` adapte son balayage : son damier suit la longueur du plus petit
+  navire, donc il couvre toute la grille dès qu'une vedette est en jeu.
 - **Multijoueur local (hot-seat)** : deux joueurs sur le même appareil, avec un
   écran de passation qui masque tout entre deux tours.
 - **Historique et statistiques**, page `/historique` : les parties passées, leur
@@ -168,6 +172,11 @@ GET    /games?limit=n         → 200 GameSummary[]   (historique)
 GET    /stats                 → 200 Statistics
 ```
 
+`POST /games` accepte un champ `fleet` : un nom de type par navire, répétitions
+comprises. Absent, la flotte classique s'applique. Une composition vide, de plus
+de quinze navires, contenant un navire plus long que la grille, ou occupant plus
+du tiers des cases, est refusée par la validation.
+
 Les valeurs nommées — mode, difficulté, placement, type de navire, orientation —
 voyagent en **texte**, jamais en entier : un nom inconnu doit produire le 400
 uniforme de FluentValidation, pas une erreur de désérialisation en amont du
@@ -191,7 +200,7 @@ testée et mergée avant d'attaquer la suivante.
 | 3 | Placement manuel de la flotte | **Livré** |
 | 4 | Multijoueur local (hot-seat) | **Livré** |
 | 5 | Persistance, historique, statistiques | **Livré** |
-| 6 | Personnalisation — grille, composition de flotte | À venir |
+| 6 | Personnalisation — grille, composition de flotte | **Livré** |
 
 **Le multijoueur en ligne est hors périmètre**, décision assumée et tracée dans
 l'[ADR 0007](./docs/adr/0007-multijoueur-local-plutot-quen-ligne.md) : trois
@@ -229,11 +238,17 @@ binôme ne saurait ni terminer ni défendre.
   elle y est arrivée en réponse au tir. Sur un appareil partagé, les données des
   deux joueurs passent nécessairement par le même navigateur. Voir
   l'[ADR 0011](./docs/adr/0011-hot-seat-alternance-de-vues.md).
-- **Le gabarit de flotte est en dur.** Une partie connaît la taille de sa grille
-  mais pas sa composition de flotte ; la rendre configurable est l'item 6.
-- **Le damier du bot `Vétéran` suppose un navire de deux cases minimum.** Avec
-  une flotte personnalisable comportant un navire d'une seule case, ce niveau
-  deviendrait *incorrect*, pas seulement moins bon.
+- **Les longueurs restent attachées aux types de navires.** On choisit combien de
+  navires de quels types, pas des longueurs libres.
+- **Une flotte occupant plus du tiers de la grille est refusée**, même si elle
+  aurait pu tenir. Le placement aléatoire procède par essais et échoue de façon
+  *aléatoire* au-delà d'une certaine densité : le plafond échange une acceptation
+  imprévisible contre un refus prévisible. Sa valeur est mesurée, pas choisie.
+  Voir l'[ADR 0013](./docs/adr/0013-flotte-personnalisable-et-pas-du-damier.md).
+- **Le classement des difficultés n'a été mesuré que sur la flotte classique.**
+  Rien n'établit que le bot `Vétéran` reste meilleur que le `Chasseur` sur une
+  flotte de vedettes — son damier y couvre toute la grille, donc les deux niveaux
+  se confondent, et l'interface ne le dit pas.
 
 ---
 
