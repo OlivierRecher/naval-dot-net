@@ -12,7 +12,7 @@ choses sont représentées ni stockées — uniquement ce que les mots désignen
 | Français | Identifiant | Définition |
 |---|---|---|
 | Partie | `Game` | Un affrontement entre exactement deux joueurs, de la création au vainqueur. Identifiée par un `GameId`. |
-| Statut de partie | `GameStatus` | `InProgress` ou `Finished`. Un troisième statut « flottes non encore placées » n'apparaîtra qu'avec le placement manuel (backlog item 3) : tant qu'il n'existe pas dans le code, il n'existe pas ici. |
+| Statut de partie | `GameStatus` | `AwaitingFleet`, `InProgress` ou `Finished`. `AwaitingFleet` signifie qu'au moins un humain n'a pas encore posé sa flotte : aucun tir n'y est accepté. Il se déduit des grilles, pas d'un drapeau — une grille humaine vide **est** l'attente. |
 | Mode de jeu | `GameMode` | `Solo` (un humain contre un bot) ou `Local` (deux humains sur le même navigateur, en alternance). |
 | Joueur | `Player` | L'un des deux participants. Un joueur est humain ou bot ; les règles ne font aucune différence entre les deux. |
 | Bot | `Bot` | Joueur piloté par le serveur. **Pas** « IA », « ordinateur » ni « adversaire » — ces mots sont ambigus dans un projet où l'IA désigne aussi l'outil de développement. |
@@ -52,7 +52,9 @@ balayage.
 | Navire | `Ship` | Une pièce occupant plusieurs cases contiguës en ligne droite. |
 | Type de navire | `ShipKind` | `Carrier` (5), `Battleship` (4), `Cruiser` (3), `Submarine` (3), `Destroyer` (2). |
 | Orientation | `Orientation` | `Horizontal` ou `Vertical`. Aucune diagonale. |
-| Placement | `Placement` | La pose d'une flotte sur une grille. `Random` (serveur) ou `Manual` (joueur). |
+| Placement | `FleetPlacement` | Qui pose la flotte de l'humain : `Random` (le serveur) ou `Manual` (le joueur, navire par navire). Choisi à la création, il ne change plus. |
+| Flotte à poser | `FleetToPlace` | La composition que le serveur réclame au joueur : un type et une longueur par navire, **aucune position**. C'est le serveur qui dicte la flotte ; le front n'a aucune règle de jeu à connaître. |
+| Grille en attente | `BoardAwaitingFleet` | La grille du prochain humain à servir. Un bot n'y figure jamais : le serveur pose sa flotte lui-même, donc le client ne peut pas la poser à sa place. |
 
 ## Tirs
 

@@ -9,7 +9,7 @@ en défaut, ce qui a réellement été observé, et ce qui reste non vérifié.
 
 Binôme : Olivier Recher (@OlivierRecher) · Ulysse (@Oulssyyy)
 
-**État : 4 revues — 2 adaptées, 1 correctif rejeté, 1 conclusion invalidée.**
+**État : 6 revues — 2 adaptées, 1 correctif rejeté, 1 conclusion invalidée, 1 défaut invisible aux tests, 1 test qui ne testait pas.**
 
 ---
 
@@ -535,3 +535,259 @@ plausible, cohérente avec le domaine, et fausse — elle ne rendait compte que
 d'un des deux signes observés. C'est ce défaut de couverture, pas le chiffre, qui
 a mis sur la piste. Une explication qui n'explique que la moitié de ce qu'on
 observe signale toujours quelque chose.
+---
+
+## Revue 5 — Une suite de tests verte peut-elle garantir un écran utilisable ?
+
+**Proposition examinée**
+
+L'écran de placement manuel produit pour l'item 3, dans `Play.razor`. La grille
+est dessinée par deux boucles imbriquées, et chaque case est un bouton qui pose
+le navire courant :
+
+```razor
+@for (var row = 0; row < Session.View.Rows; row++)
+{
+    for (var column = 0; column < Session.View.Columns; column++)
+    {
+        var cell = new CoordinatesDto(column, row);
+
+        <button type="button"
+                class="cell @(_takenCells.Contains(cell) ? "cell-ship" : "cell-empty")"
+                title="@Label(cell)"
+                @onclick="() => PlaceAt(column, row)">
+        </button>
+    }
+}
+```
+
+Au moment de l'écrire, la proposition était accompagnée d'un argument de
+couverture : le domaine est en TDD, la frontière HTTP a ses tests d'intégration,
+les neuf mutations sont détectées, **172 tests sont verts**. Le placement manuel
+était donc annoncé comme livré.
+
+**Hypothèse à vérifier**
+
+> Une fonctionnalité dont le domaine et la frontière HTTP sont testés, et dont
+> le composant compile, est utilisable dans le navigateur.
+
+C'est l'hypothèse implicite de toute annonce de livraison fondée sur une suite
+verte. `AGENTS.md` § 12 ne la partage pas : « le comportement est **jouable dans
+le navigateur**, pas seulement testé » y est une ligne distincte de
+« `dotnet build` et `dotnet test` passent ».
+
+**Expérience**
+
+Lancer l'API et le front, créer une partie en placement manuel, et **cliquer
+réellement** cinq cases de la grille.
+
+Résultat attendu, écrit avant exécution : le compteur passe de « 0 / 5 navires
+placés » à « 5 / 5 », les cases occupées changent de couleur, et le bouton
+« Valider la flotte » s'active.
+
+Erreur que ce contrôle peut détecter : tout ce qui sépare un composant qui
+compile d'un composant qui répond — un gestionnaire jamais appelé, une liaison
+inversée, un état qui ne se rafraîchit pas.
+
+**Observation**
+
+Après cinq clics : **« 0 / 5 navires placés »**. Aucune case ne change. Aucune
+erreur, aucune exception, aucun appel réseau — rien ne signale quoi que ce soit.
+
+La cause est dans le lambda. `column` et `row` sont les variables d'une boucle
+`for` : en C#, une boucle `for` n'a **qu'une seule** variable pour toutes ses
+itérations, et le lambda la capture par référence. Au moment où l'utilisateur
+clique, les boucles sont terminées depuis longtemps et les deux variables valent
+leur valeur de sortie — `10` et `10`. Chaque bouton de la grille appelait donc
+`PlaceAt(10, 10)`, que le contrôle de débordement rejetait en silence.
+
+Le correctif tient en un mot : capturer la copie locale, `PlaceAt(cell)`.
+
+Le détail qui rend l'affaire instructive : **la grille de tir voisine, écrite à
+l'item 1, n'avait pas ce défaut.** Elle capture `target`, une copie locale créée
+dans le corps de la boucle. Les deux grilles sont côte à côte dans le même
+fichier ; l'une est correcte, l'autre non, et la différence tient à une variable
+intermédiaire dont rien n'indique qu'elle est autre chose qu'une commodité de
+lecture.
+
+**Décision et justification**
+
+**Défaut corrigé, et l'argument de couverture rejeté.**
+
+Les 172 tests ne pouvaient pas détecter ce défaut, et il ne s'agit pas d'un trou
+qu'on pourrait combler en en ajoutant. Aucun d'eux n'instancie un composant
+Blazor : le projet n'a pas de `bUnit`, et `AGENTS.md` § 8 ne prévoit que le
+domaine et l'API. Le défaut vit exactement dans l'espace que la stratégie de test
+laisse vide — et c'est une décision assumée, pas un oubli.
+
+Ce qui est rejeté, c'est donc l'inférence : « 172 tests verts » n'est pas un
+argument sur le front, parce qu'aucun des 172 ne le traverse. La ligne d'`AGENTS.md`
+§ 12 qui exige le navigateur n'est pas une formalité de plus, c'est la **seule**
+vérification qui couvre cette zone.
+
+**Preuves et limites**
+
+| | |
+|---|---|
+| Défaut observé | 5 clics, compteur inchangé à 0 / 5 |
+| Cause | Capture des variables de boucle `for` dans `@onclick` |
+| Correction | `PlaceAt(cell)` sur la copie locale, plus un commentaire disant pourquoi |
+| Contrôle après correction | 5 navires posés, flotte validée, partie jouée jusqu'au tir et à la riposte du bot |
+| Contre-exemple dans le même fichier | La grille de tir de l'item 1, correcte parce qu'elle capture `target` |
+
+Ce qui **reste non vérifié** :
+
+- La correction n'a **aucun test automatisé**. Elle est protégée par la même
+  chose qui l'a trouvée : quelqu'un qui clique. Une régression identique
+  passerait la CI.
+- Le contrôle navigateur a porté sur un seul chemin — grille 10 × 10, cinq
+  navires verticaux, tous valides. Les refus locaux (débordement, chevauchement)
+  n'ont pas été exercés à la main ; ils ne sont couverts ni par un test, ni par
+  cette observation.
+- Rien n'établit qu'il ne reste pas d'autres captures fautives ailleurs dans le
+  front. Les deux grilles ont été relues ; le reste de `Play.razor` n'a pas été
+  audité pour ce motif précis.
+
+**Ce que cette revue enseigne pour la suite du projet**
+
+Une suite de tests ne dit rien des zones qu'elle ne traverse pas, et la tentation
+est de lire son verdict comme s'il portait sur le tout. « 172 tests, 0 échec »
+est une phrase vraie qui, placée à côté de « le placement manuel est livré »,
+suggère un lien qui n'existe pas.
+
+La règle retenue : **avant d'annoncer une fonctionnalité livrée, nommer la zone
+que les tests ne couvrent pas et dire par quoi elle a été vérifiée à la place.**
+Ici la réponse est « le front, vérifié à la main dans le navigateur » — et c'est
+cette phrase, pas le nombre de tests, qui porte la livraison.
+
+Corollaire pour l'item 4 (hot-seat) et l'item 6 (flotte personnalisable), qui
+ajouteront tous deux du code de composant : le contrôle navigateur n'est pas la
+dernière étape de confort une fois les tests verts, c'est la vérification
+principale de cette partie-là du code.
+---
+
+## Revue 6 — Un test de concurrence qui passe prouve-t-il qu'il y a un verrou ?
+
+**Proposition examinée**
+
+La revue Copilot de la PR #5 relève, justement, qu'aucun test ne lance deux
+soumissions de flotte simultanées, alors que `GameConcurrencyTests` le fait pour
+les tirs depuis l'item 1. Le test écrit en réponse :
+
+```csharp
+var accepted = 0;
+
+Parallel.For(0, 64, _ =>
+{
+    if (game.PlaceFleetFromClient(ValidFleet()).IsAccepted)
+    {
+        Interlocked.Increment(ref accepted);
+    }
+});
+
+Assert.Equal(1, accepted);
+```
+
+Il passait. Le trou signalé par la revue paraissait comblé.
+
+**Hypothèse à vérifier**
+
+> Ce test échoue si le verrou de `PlaceFleetFromClient` disparaît.
+
+C'est la seule chose qui distingue un test de concurrence d'un test qui se
+contente de ne pas planter. La formulation vient de `CLAUDE.md` : « pour chaque
+nouveau test de règle, casser volontairement la règle, montrer le test au rouge,
+rétablir ».
+
+**Expérience**
+
+Remplacer `lock (_gate)` par `if (true)` dans `PlaceFleetFromClient`, exécuter.
+
+Résultat attendu, écrit avant exécution : sans verrou, plusieurs fils franchissent
+le contrôle « une grille attend-elle une flotte ? » avant qu'aucun n'ait posé de
+navire ; le test doit donc compter plus d'une acceptation et virer au rouge.
+
+**Observation**
+
+```
+base (avec verrou)     : 0/14 au rouge
+mutation (sans verrou) : 0/14 au rouge
+```
+
+**Le test passait sans verrou.** Il n'attestait rien.
+
+La cause n'est pas dans le code testé mais dans la façon de lancer les fils.
+`Parallel.For` démarre ses itérations progressivement : la première soumission —
+quelques microsecondes — se termine avant que la deuxième ne commence. La course
+ne se produisait jamais, donc le test ne pouvait pas la voir.
+
+Une première correction, un `ManualResetEventSlim` sur lequel les fils attendent
+un signal commun, **n'a pas suffi** : les premiers fils partaient pendant que les
+derniers étaient encore créés. Il a fallu attendre explicitement que tous soient
+garés sur le signal avant de le lever.
+
+Avec 64 fils réellement synchronisés, l'effet est massif et reproductible :
+
+| | acceptations | navires sur la grille |
+|---|---|---|
+| avec verrou | 1, dix fois sur dix | 5 |
+| sans verrou | 2 à 64 | 5 à **18** |
+
+Dix-huit navires sur une grille qui en admet cinq : deux soumissions entrelacées
+posent chacune la leur, et `Board.Place` refuse silencieusement les
+chevauchements sans que `PlaceFleetFromClient` regarde son retour.
+
+**Décision et justification**
+
+**Diagnostic de la revue accepté, premier correctif rejeté, deuxième adopté.**
+
+La remarque de Copilot était juste et le trou réel. Le test écrit en réponse ne
+le comblait pas : il documentait une intention. Seule la mutation l'a montré —
+aucune relecture ne l'aurait fait, puisque le code du test *décrit* exactement ce
+qu'il prétend faire.
+
+Le test corrigé lance 64 fils, attend qu'ils soient tous en attente, puis les
+libère ensemble. Il vérifie deux choses au lieu d'une : une seule acceptation, et
+cinq navires — la seconde assertion attrape la corruption même si la première
+passait par chance.
+
+**Preuves et limites**
+
+| | |
+|---|---|
+| Mutation avant correction | `lock` retiré → 0 / 14 au rouge |
+| Mutation après correction | `lock` retiré → 1 / 14 au rouge, le test nommé |
+| Mesure de la course | 10 essais, 64 fils : 2 à 64 acceptations, jusqu'à 18 navires |
+| Remarque d'origine | PR #5, fil `PRRT_kwDOUbgUe86igkd4` |
+
+Ce qui **reste non vérifié** :
+
+- Le test **n'établit pas l'absence de course**, il en attrape l'occurrence —
+  même réserve que l'ADR 0008 pour les tirs. Il échoue systématiquement sur cette
+  machine quand le verrou saute ; rien ne garantit qu'il le ferait sur une
+  machine à un seul cœur.
+- Le `Thread.Sleep(20)` avant le signal est un délai empirique, pas une garantie
+  de synchronisation. Il a été choisi parce qu'il rend la course reproductible
+  ici, pas parce qu'une propriété le fonde.
+- Les tests de concurrence des tirs, écrits à l'item 1, **n'ont pas été soumis à
+  ce contrôle** : ils utilisent `Parallel.ForEach` et leur mutation avait bien
+  mordu à l'époque. Rien ne dit qu'ils mordraient encore sur une machine plus
+  rapide.
+
+**Ce que cette revue enseigne pour la suite du projet**
+
+Un test de concurrence est le seul type de test dont la réussite peut venir de ce
+qu'il n'a pas fait le travail. Un test fonctionnel qui n'exerce rien échoue en
+général sur une assertion ; un test de concurrence qui n'a pas produit de course
+observe un état parfaitement valide et passe.
+
+La règle retenue : **un test de concurrence n'est pas écrit tant que la mutation
+correspondante n'a pas été exécutée.** Pour les autres tests, la mutation confirme
+ce qu'on croit déjà ; pour ceux-là, elle est la seule chose qui distingue un test
+d'un commentaire.
+
+Corollaire : cette revue est née d'une remarque d'un relecteur automatique qui
+avait raison sur le fond. Le trou existait. Mais la réponse spontanée à une
+remarque juste — écrire le test manquant et le voir passer — reproduit
+exactement le défaut que la remarque signalait, en donnant cette fois
+l'apparence de l'avoir corrigé.

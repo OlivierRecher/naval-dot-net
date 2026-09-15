@@ -9,7 +9,7 @@ public class GameEndpointsTests(WebApplicationFactory<Program> factory) : IClass
 {
     private readonly HttpClient _client = factory.CreateClient();
 
-    private static CreateGameRequest ValidRequest => new("Olivier", 10, 10, "Random");
+    private static CreateGameRequest ValidRequest => new("Olivier", 10, 10, "Random", "Random");
 
     private async Task<GameViewResponse> CreateGameAsync()
     {
@@ -39,13 +39,13 @@ public class GameEndpointsTests(WebApplicationFactory<Program> factory) : IClass
     [InlineData("Olivier", 10, 10, "Expert")]
     [InlineData("Olivier", 10, 10, "")]
     // Enum.TryParse accepterait la valeur numerique sous-jacente : la valider
-    // ainsi laisserait passer un niveau qui n'existe pas. Voir BotDifficulties.
+    // ainsi laisserait passer un niveau qui n'existe pas. Voir EnumNames.
     [InlineData("Olivier", 10, 10, "42")]
     public async Task CreateGame_WithAnInvalidRequest_Returns400(string name, int columns, int rows, string difficulty)
     {
         // Aucun de ces endpoints n'appelle ValidateAsync : si le filtre generique
         // n'etait pas branche, ces requetes passeraient. Voir ADR 0006.
-        var response = await _client.PostAsJsonAsync("/games", new CreateGameRequest(name, columns, rows, difficulty));
+        var response = await _client.PostAsJsonAsync("/games", new CreateGameRequest(name, columns, rows, difficulty, "Random"));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }

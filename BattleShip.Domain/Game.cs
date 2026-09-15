@@ -8,6 +8,7 @@ public enum GameMode
 
 public enum GameStatus
 {
+    AwaitingFleet,
     InProgress,
     Finished
 }
@@ -31,6 +32,12 @@ public sealed class Game
         BotDifficulty = botDifficulty;
         _current = first;
         _waiting = second;
+
+        // Le statut se deduit des grilles plutot que d'un drapeau : un drapeau
+        // pourrait contredire l'etat reel des flottes.
+        Status = first.Board.Ships.Count is 0 || second.Board.Ships.Count is 0
+            ? GameStatus.AwaitingFleet
+            : GameStatus.InProgress;
     }
 
     public Guid Id { get; } = Guid.NewGuid();
@@ -39,7 +46,7 @@ public sealed class Game
 
     public BotDifficulty BotDifficulty { get; }
 
-    public GameStatus Status { get; private set; } = GameStatus.InProgress;
+    public GameStatus Status { get; private set; }
 
     public Player CurrentPlayer => _current;
 
@@ -94,6 +101,13 @@ public sealed class Game
     {
         lock (_gate)
         {
+            // Ce garde n'est pas redondant avec FireRules : sans lui, le refus
+            // deviendrait NotTheBotTurn, qui decrit mal la situation.
+            if (Status is GameStatus.AwaitingFleet)
+            {
+                return FireOutcome.Rejected(FireRejection.FleetNotPlaced);
+            }
+
             if (Status is GameStatus.Finished)
             {
                 return FireOutcome.Rejected(FireRejection.GameFinished);
@@ -109,6 +123,41 @@ public sealed class Game
     }
 
     /// <summary>
+    /// Pose la flotte demandee par le navigateur. Le client n'envoie aucune
+    /// identite : le serveur remplit la grille du seul humain qui en attend une,
+    /// donc jamais celle d'un bot. Voir ADR 0003.
+    /// </summary>
+    public FleetOutcome PlaceFleetFromClient(IReadOnlyList<ShipPlacement> placements)
+    {
+        lock (_gate)
+        {
+            if (PlayerAwaitingFleet() is not { } placer)
+            {
+                return FleetOutcome.Rejected(FleetRejection.FleetAlreadyPlaced);
+            }
+
+            var board = placer.Board;
+
+            if (FleetPlacementRules.Validate(board.Size, FleetTemplate.Standard, placements) is { } rejection)
+            {
+                return FleetOutcome.Rejected(rejection);
+            }
+
+            foreach (var placement in placements)
+            {
+                board.Place(placement);
+            }
+
+            if (PlayerAwaitingFleet() is null)
+            {
+                Status = GameStatus.InProgress;
+            }
+
+            return FleetOutcome.Accepted;
+        }
+    }
+
+    /// <summary>
     /// Projection destinee au navigateur. Un bot n'a pas de client : lui servir
     /// sa propre vue reviendrait a publier sa flotte. Voir ADR 0003.
     /// </summary>
@@ -116,6 +165,15 @@ public sealed class Game
     {
         lock (_gate)
         {
+            // Pendant le placement, le viewer n'est pas le joueur courant mais
+            // celui dont on attend la flotte : c'est lui qui est devant l'ecran.
+            // Sans cela, en mode Local, le second joueur recevrait une vue du
+            // premier, sans rien a poser et sans moyen d'avancer.
+            if (Status is GameStatus.AwaitingFleet && PlayerAwaitingFleet() is { } placer)
+            {
+                return ViewLocked(placer);
+            }
+
             return ViewLocked(_current.IsBot ? _waiting : _current);
         }
     }
@@ -127,6 +185,15 @@ public sealed class Game
             return ViewLocked(viewer);
         }
     }
+
+    /// <summary>
+    /// Le prochain humain dont on attend la flotte. Un bot n'y figure jamais :
+    /// le serveur remplit sa grille lui-meme, donc le client ne peut pas la
+    /// poser a sa place. Voir ADR 0003.
+    /// </summary>
+    private Player? PlayerAwaitingFleet() =>
+        new[] { _current, _waiting }
+            .FirstOrDefault(player => !player.IsBot && player.Board.Ships.Count is 0);
 
     private FireOutcome FireLocked(Coordinates target)
     {
@@ -165,6 +232,9 @@ public sealed class Game
             [.. _shots.Where(shot => shot.ShooterId == viewer.Id)
                       .Select(shot => new RevealedCell(shot.Target, shot.Result))],
             BotDifficulty,
+            Status is GameStatus.AwaitingFleet && viewer.Board.Ships.Count is 0
+                ? [.. FleetTemplate.Standard.Select(kind => new ShipToPlace(kind, kind.Size()))]
+                : [],
             Winner?.Name);
     }
 }
