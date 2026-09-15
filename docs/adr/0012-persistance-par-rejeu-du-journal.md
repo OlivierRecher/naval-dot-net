@@ -114,6 +114,12 @@ Voir `REVUE-IA.md`, revue 8.
 - Pas de migrations : le schéma est créé au démarrage s'il manque
   (`EnsureCreated`). Le périmètre ne comporte aucune évolution de schéma à
   rejouer, et une migration vide serait un rituel sans objet.
+
+  > **Falsifié par l'item suivant.** L'item 6 a ajouté une colonne `Fleet`, et
+  > `EnsureCreated` ne modifie jamais un schéma existant : une base créée avant
+  > cet item échouait sur « table Games has no column named Fleet ». « Aucune
+  > évolution de schéma à rejouer » était vrai au moment où c'était écrit et
+  > faux un item plus tard. Voir ADR 0013 et `REVUE-IA.md` revue 10.
 - Une partie **terminée quitte le cache**. Elle ne change plus, son verrou ne
   protège plus rien, et la garder ferait croître la mémoire sans borne sur un
   serveur qui vit longtemps. SQLite suffit à la relire. Ajouté par la revue de la

@@ -33,10 +33,16 @@ public sealed class Game
     /// <see cref="GameMode.Local"/> n'oppose aucun bot — exiger un niveau y
     /// reviendrait a inventer une donnee sans objet.
     /// </summary>
-    public Game(GameMode mode, Player first, Player second, BotDifficulty botDifficulty = BotDifficulty.Random)
+    public Game(
+        GameMode mode,
+        Player first,
+        Player second,
+        BotDifficulty botDifficulty = BotDifficulty.Random,
+        IReadOnlyList<ShipKind>? fleet = null)
     {
         Mode = mode;
         BotDifficulty = botDifficulty;
+        Fleet = fleet ?? FleetTemplate.Standard;
         _first = first;
         _second = second;
         _current = first;
@@ -54,6 +60,12 @@ public sealed class Game
     public GameMode Mode { get; }
 
     public BotDifficulty BotDifficulty { get; }
+
+    /// <summary>
+    /// La composition en jeu, identique pour les deux joueurs. Elle etait en dur
+    /// jusqu'a l'item 6 ; l'ADR 0010 l'avait note comme dette. Voir ADR 0013.
+    /// </summary>
+    public IReadOnlyList<ShipKind> Fleet { get; }
 
     public GameStatus Status { get; private set; }
 
@@ -87,9 +99,10 @@ public sealed class Game
         Player first,
         Player second,
         BotDifficulty botDifficulty,
-        IReadOnlyList<Coordinates> shots)
+        IReadOnlyList<Coordinates> shots,
+        IReadOnlyList<ShipKind>? fleet = null)
     {
-        var game = new Game(mode, first, second, botDifficulty) { Id = id };
+        var game = new Game(mode, first, second, botDifficulty, fleet) { Id = id };
 
         foreach (var target in shots)
         {
@@ -176,7 +189,7 @@ public sealed class Game
 
             var board = placer.Board;
 
-            if (FleetPlacementRules.Validate(board.Size, FleetTemplate.Standard, placements) is { } rejection)
+            if (FleetPlacementRules.Validate(board.Size, Fleet, placements) is { } rejection)
             {
                 return FleetOutcome.Rejected(rejection);
             }
@@ -232,12 +245,16 @@ public sealed class Game
                 BotDifficulty,
                 Status,
                 _first.Board.Size,
+                Fleet,
                 Winner?.Name,
                 StateOf(_first),
                 StateOf(_second),
                 [.. _shots]);
         }
     }
+
+    private IReadOnlyList<ShipToPlace> FleetAsShipsToPlace =>
+        [.. Fleet.Select(kind => new ShipToPlace(kind, kind.Size()))];
 
     private static PlayerState StateOf(Player player) => new(
         player.Id,
@@ -303,8 +320,9 @@ public sealed class Game
                       .Select(shot => new RevealedCell(shot.Target, shot.Result))],
             BotDifficulty,
             Status is GameStatus.AwaitingFleet && viewer.Board.Ships.Count is 0
-                ? [.. FleetTemplate.Standard.Select(kind => new ShipToPlace(kind, kind.Size()))]
+                ? FleetAsShipsToPlace
                 : [],
+            FleetAsShipsToPlace,
             Winner?.Name);
     }
 }

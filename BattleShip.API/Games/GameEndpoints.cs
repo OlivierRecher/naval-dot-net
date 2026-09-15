@@ -47,11 +47,15 @@ public static class GameEndpoints
         var placement = EnumNames<FleetPlacement>.Parse(request.FleetPlacement);
         var mode = EnumNames<GameMode>.Parse(request.Mode);
 
+        var fleet = request.Fleet is { Count: > 0 } requested
+            ? requested.Select(kind => EnumNames<ShipKind>.Parse(kind)).ToList()
+            : FleetTemplate.Standard;
+
         try
         {
             Board HumanBoard() => placement is FleetPlacement.Manual
                 ? new Board(size)
-                : placer.Place(size, FleetTemplate.Standard);
+                : placer.Place(size, fleet);
 
             var first = new Player(request.PlayerName, isBot: false, HumanBoard());
 
@@ -59,9 +63,9 @@ public static class GameEndpoints
             // flotte ; en Solo le serveur remplit toujours la grille du bot.
             var second = mode is GameMode.Local
                 ? new Player(request.OpponentName!, isBot: false, HumanBoard())
-                : new Player("Bot", isBot: true, placer.Place(size, FleetTemplate.Standard));
+                : new Player("Bot", isBot: true, placer.Place(size, fleet));
 
-            var game = new Game(mode, first, second, EnumNames<BotDifficulty>.Parse(request.BotDifficulty));
+            var game = new Game(mode, first, second, EnumNames<BotDifficulty>.Parse(request.BotDifficulty), fleet);
 
             repository.Add(game);
 

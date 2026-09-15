@@ -9,7 +9,7 @@ en défaut, ce qui a réellement été observé, et ce qui reste non vérifié.
 
 Binôme : Olivier Recher (@OlivierRecher) · Ulysse (@Oulssyyy)
 
-**État : 8 revues — 2 adaptées, 1 correctif rejeté, 1 conclusion invalidée, 2 défauts invisibles aux tests, 2 fois des tests qui ne testaient pas.**
+**État : 10 revues — 2 adaptées, 1 correctif rejeté, 2 conclusions invalidées, 2 défauts invisibles aux tests, 2 fois des tests qui ne testaient pas, 1 limite annoncée puis soldée.**
 
 ---
 
@@ -1020,3 +1020,221 @@ D'où la règle retenue : **une décision prise « pour plus tard » doit énonc
 qu'elle promet de façon réfutable**, et l'item qui s'en sert doit aller compter.
 Une promesse vague — « ça facilitera la bascule » — aurait été impossible à
 prendre en défaut, donc sans valeur.
+---
+
+## Revue 9 — Une limite écrite dans un ADR se solde-t-elle le jour venu ?
+
+**Proposition examinée**
+
+L'ADR 0009, rédigé à l'item 2, se termine par une limite qu'il annonce lui-même
+comme grave :
+
+> **Le damier suppose un navire de deux cases minimum.** Le balayage d'une case
+> sur deux de `HuntTargetParity` ne peut rien manquer tant que le plus petit
+> navire occupe deux cases adjacentes. Le jour où la flotte devient
+> personnalisable (item 6), un navire d'une seule case rendrait ce niveau
+> **incorrect**, pas seulement moins bon.
+
+Quatre items plus tard, l'item 6 rend la flotte personnalisable. La proposition
+examinée est donc celle-ci : **cette limite était-elle réelle, et le fait de
+l'avoir écrite a-t-il servi à quelque chose ?**
+
+**Hypothèse à vérifier**
+
+> Avec un navire d'une seule case, le niveau `HuntTargetParity` manque des
+> navires — c'est-à-dire qu'il existe des parties qu'il ne peut pas finir.
+
+C'est une affirmation qui n'avait jamais été testée : au moment où elle est
+écrite, aucun navire d'une case n'existe dans le domaine. Elle est déduite, pas
+observée.
+
+**Expérience**
+
+Ajouter un type d'une case, construire une flotte qui en contient un, et
+observer le balayage du bot — puis regarder si la déduction tient.
+
+Résultat attendu, écrit avant exécution : si la limite est réelle, le damier de
+pas 2 laisse des cases inatteignables, et un navire posé sur l'une d'elles ne
+peut jamais être touché pendant la chasse.
+
+**Observation**
+
+La limite est réelle, et le mécanisme est plus simple que sa formulation.
+
+Le damier de pas 2 ne visite que les cases où `(colonne + ligne)` est pair,
+c'est-à-dire **la moitié de la grille**. Un navire de deux cases occupe
+forcément une case de chaque parité, donc il croise le damier. Un navire d'une
+seule case posé sur une case impaire n'en croise **aucune** : la chasse ne peut
+pas le trouver. Elle finit par le toucher — quand toutes les cases paires sont
+épuisées et que le repli s'enclenche — mais après avoir tiré la moitié de la
+grille pour rien.
+
+Ce qui n'était **pas** prévu par l'ADR 0009, en revanche : la correction n'est
+pas un cas particulier, c'est une **généralisation**. Le raisonnement d'origine —
+« un navire de deux cases croise une case sur deux » — n'est que l'instance L = 2
+de : **un navire de longueur L croise forcément une maille de pas L, jamais
+moins.** Le pas suit donc le plus petit navire de la flotte, et la flotte
+classique retrouve le damier d'origine sans qu'on l'y force.
+
+**Décision et justification**
+
+**Limite confirmée, soldée par une généralisation.**
+
+`HuntTargetParityBot` ne porte plus de constante. Il lit la composition dans la
+`GameView` — publique, puisqu'elle est annoncée à la création et partagée par les
+deux joueurs — et en déduit son pas. Avec une vedette d'une case, le pas vaut 1 :
+le niveau devient un `HuntTarget` ordinaire. Il ne fait pas mieux, mais il ne
+manque rien.
+
+Le type `PatrolBoat` a été ajouté **pour rendre le cas atteignable**. Sans lui,
+la limite serait restée théorique et la généralisation invérifiable : on aurait
+écrit un code plus général sans pouvoir montrer qu'il l'était.
+
+**Preuves et limites**
+
+| | |
+|---|---|
+| Limite annoncée | ADR 0009, item 2 |
+| Cas rendu atteignable | `ShipKind.PatrolBoat`, une case |
+| Damier, flotte classique | Une case sur deux, 100 graines |
+| Damier, navire d'une case | Toute la grille |
+| Damier, plus petit navire de 3, 4, 5 | Pas 3, 4, 5 |
+| Mutation — pas figé à 2 | 5 tests au rouge sur 7 |
+| Mutation — pas suivant le plus **grand** navire | 3 tests au rouge sur 7 |
+
+Ce qui **reste non vérifié** :
+
+- Le coût réel du damier n'a **pas été remesuré** par composition. On sait que le
+  pas est correct pour chaque flotte ; on ne sait pas combien de tirs il fait
+  gagner sur une flotte de vedettes, ni si `HuntTargetParity` reste
+  systématiquement meilleur que `HuntTarget` hors flotte classique. Les tests de
+  classement de l'item 2 ne portent que sur la flotte standard.
+- La garantie « un navire de longueur L croise une maille de pas L » est
+  démontrée pour les mailles diagonales `(colonne + ligne) % L`. Aucun test ne
+  l'établit pour une autre forme de maille ; c'est un raisonnement, pas une
+  mesure.
+- Rien n'empêche une flotte de ne contenir que des vedettes, ce qui réduit le
+  niveau `Vétéran` au niveau `Chasseur` sans que l'interface le dise.
+
+**Ce que cette revue enseigne pour la suite du projet**
+
+Une limite écrite dans un ADR n'est utile que si quelqu'un revient la chercher.
+Celle-ci a tenu quatre items, nommait l'item qui la déclencherait, et disait
+précisément ce qui casserait — « incorrect, pas seulement moins bon ». C'est cette
+précision qui l'a rendue actionnable : elle indiquait quoi construire pour la
+mettre à l'épreuve.
+
+La règle retenue : **une limite connue se formule avec son déclencheur et sa
+conséquence**, pas comme une réserve générale. « Ce niveau suppose des navires
+d'au moins deux cases » aurait été vrai et inerte ; « l'item 6 le rendra
+incorrect » a produit un test, un type, et une généralisation.
+
+Deuxième enseignement : la correction d'une limite est souvent une
+généralisation, pas une rustine. Le code d'origine n'était pas faux — il était le
+cas particulier d'une règle qu'on n'avait pas écrite.
+---
+
+## Revue 10 — « Aucune évolution de schéma à rejouer » : combien de temps ?
+
+**Proposition examinée**
+
+L'ADR 0012, rédigé à l'item 5, justifie l'absence de migrations :
+
+> Pas de migrations : le schéma est créé au démarrage s'il manque
+> (`EnsureCreated`). **Le périmètre ne comporte aucune évolution de schéma à
+> rejouer**, et une migration vide serait un rituel sans objet.
+
+L'argument est économique et raisonnable : adopter l'outillage des migrations
+pour un schéma qui ne bougera pas, c'est du cérémonial. Il repose entièrement sur
+une prédiction — « le périmètre ne comporte aucune évolution ».
+
+**Hypothèse à vérifier**
+
+> Le schéma de ce projet n'évoluera plus.
+
+**Expérience**
+
+L'item 6 ajoute une colonne `Fleet` à la table `Games`. Créer une base **avant**
+cette colonne, la mettre à jour du code, et essayer d'écrire une partie.
+
+Résultat attendu, écrit avant exécution : si l'hypothèse tient, l'écriture passe.
+Si elle ne tient pas, SQLite refuse une colonne qu'il ne connaît pas.
+
+**Observation**
+
+```
+Microsoft.Data.Sqlite.SqliteException : SQLite Error 1:
+  'table Games has no column named Fleet'.
+```
+
+L'hypothèse est fausse, et elle l'est devenue **à l'item suivant**. La prédiction
+n'a pas tenu un item.
+
+Le détail qui compte : `EnsureCreated` ne signale rien. Il regarde si la base
+existe, la trouve, et ne fait rien de plus. Le schéma périmé ne devient visible
+qu'à la première écriture — c'est-à-dire chez l'utilisateur, pas au démarrage.
+
+Une nuance à la décharge de l'ADR 0012 : la remarque de la revue affirmait aussi
+que « le repli `FleetFrom` ne peut pas s'exécuter, la lecture du schéma échouant
+d'abord ». C'est exact pour l'**écriture**, qui échoue en effet avant tout repli.
+Pour la **lecture** d'une partie écrite avant la colonne, en revanche, le repli
+fonctionne parfaitement une fois la colonne ajoutée avec une valeur vide : `Fleet`
+vide signifie « flotte par défaut », ce qui est exactement ce qu'elle était. Les
+deux cas sont couverts par deux tests distincts.
+
+**Décision et justification**
+
+**Hypothèse rejetée, décision conservée, portée corrigée.**
+
+`SchemaUpgrade.Apply` crée le schéma s'il manque **puis** ajoute les colonnes
+apparues depuis, en interrogeant `pragma_table_info`. Idempotent, et
+volontairement minimal : une liste de colonnes et un `ALTER TABLE`.
+
+Le choix de ne pas adopter les migrations est **maintenu**, mais il change de
+nature. Il n'est plus fondé sur « le schéma ne bougera pas » — cette affirmation
+est morte — mais sur « la seule évolution à ce jour est un ajout de colonne, et
+un ajout de colonne se rattrape en six lignes ». L'ADR 0013 nomme désormais le
+seuil : **au premier changement qui ne soit pas un ajout de colonne — renommage,
+contrainte, table scindée — il faudra passer aux migrations.**
+
+C'est une différence importante. Une justification par prédiction se périme en
+silence ; une justification par condition dit quand elle cesse de valoir.
+
+**Preuves et limites**
+
+| | |
+|---|---|
+| Prédiction examinée | ADR 0012, item 5 |
+| Durée de vie | Un item |
+| Défaut reproduit | `ALTER TABLE Games DROP COLUMN Fleet`, puis écriture → `SqliteException` |
+| Correction | `SchemaUpgrade.Apply`, colonnes ajoutées via `pragma_table_info` |
+| Mutation | Mise à niveau retirée → 1 test au rouge |
+| Compatibilité amont | Une partie sans composition stockée se relit avec la flotte classique |
+
+Ce qui **reste non vérifié** :
+
+- La mise à niveau ne sait qu'**ajouter des colonnes**. Aucun autre type
+  d'évolution n'est couvert, et rien dans le code n'empêche quelqu'un d'en
+  tenter une — seul l'ADR le dit.
+- Le test reconstitue l'ancien schéma en **supprimant** la colonne d'une base
+  neuve. Ce n'est pas rigoureusement la même chose qu'une base réellement créée
+  par la version précédente ; l'ordre des colonnes diffère, par exemple.
+- Aucun test ne couvre une base **corrompue** ou partiellement mise à niveau —
+  par exemple une interruption entre deux `ALTER TABLE`.
+
+**Ce que cette revue enseigne pour la suite du projet**
+
+Deux décisions de ce projet reposaient sur une prédiction : l'ADR 0004 promettait
+qu'aucun endpoint ne changerait à la bascule vers SQLite, l'ADR 0012 que le
+schéma n'évoluerait pas. **Les deux ont été prises en défaut par l'item suivant**,
+et dans les deux cas la décision de fond est restée bonne — c'est sa
+justification qui était trop large.
+
+La règle retenue : **justifier par une condition, pas par une prédiction.** « Le
+schéma ne bougera pas » ne se vérifie qu'en échouant ; « tant que les évolutions
+sont des ajouts de colonne » se vérifie à chaque changement, et dit de lui-même
+quand il faut réexaminer.
+
+Corollaire pratique : `EnsureCreated` est silencieux sur un schéma périmé. Une
+opération qui ne peut pas signaler qu'elle n'a rien fait est un mauvais endroit
+pour déposer une hypothèse.

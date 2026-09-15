@@ -42,9 +42,9 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    // Pas de migrations : le schema est cree au demarrage s'il manque. Le
-    // périmètre ne comporte aucune evolution de schema a rejouer. ADR 0012.
-    scope.ServiceProvider.GetRequiredService<BattleShipDbContext>().Database.EnsureCreated();
+    // Cree le schema s'il manque, et rattrape les colonnes ajoutees depuis.
+    // EnsureCreated ne fait que la premiere moitie du travail. ADR 0013.
+    SchemaUpgrade.Apply(scope.ServiceProvider.GetRequiredService<BattleShipDbContext>());
 }
 
 if (app.Environment.IsDevelopment())

@@ -12,7 +12,12 @@ public sealed record CreateGameRequest(
     string Mode,
     string BotDifficulty,
     string FleetPlacement,
-    string? OpponentName = null);
+    string? OpponentName = null,
+    /// <summary>
+    /// La composition voulue, un nom de type par navire, répétitions comprises.
+    /// Absente ou vide, la flotte classique s'applique. Voir ADR 0013.
+    /// </summary>
+    IReadOnlyList<string>? Fleet = null);
 
 public sealed record FireRequest(int Column, int Row);
 
@@ -80,6 +85,7 @@ public sealed record GameViewResponse(
     IReadOnlyList<RevealedCellDto> ShotsFired,
     string BotDifficulty,
     IReadOnlyList<ShipToPlaceDto> FleetToPlace,
+    IReadOnlyList<ShipToPlaceDto> Fleet,
     string? Winner);
 
 public sealed record ShotOutcomeResponse(
@@ -111,4 +117,29 @@ public static class BotDifficultyCatalog
 
     public static string SummaryOf(string? name) =>
         All.FirstOrDefault(option => option.Name == name)?.Summary ?? string.Empty;
+}
+
+public sealed record ShipOption(string Name, string Label, int Size);
+
+/// <summary>
+/// Les navires proposés au joueur. Même rôle que <see cref="BotDifficultyCatalog"/>
+/// et même garde : un test interdit qu'il diverge de l'énumération du domaine.
+/// </summary>
+public static class ShipCatalog
+{
+    public static IReadOnlyList<ShipOption> All { get; } =
+    [
+        new("Carrier", "Porte-avions", 5),
+        new("Battleship", "Cuirassé", 4),
+        new("Cruiser", "Croiseur", 3),
+        new("Submarine", "Sous-marin", 3),
+        new("Destroyer", "Torpilleur", 2),
+        new("PatrolBoat", "Vedette", 1)
+    ];
+
+    public static IReadOnlyList<string> Classic { get; } =
+        ["Carrier", "Battleship", "Cruiser", "Submarine", "Destroyer"];
+
+    public static string LabelOf(string? name) =>
+        All.FirstOrDefault(ship => ship.Name == name)?.Label ?? name ?? string.Empty;
 }

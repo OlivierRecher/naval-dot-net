@@ -25,6 +25,7 @@ public sealed class SqliteGameRepository(BattleShipDbContext db, GameCache cache
             Id = state.Id,
             Mode = state.Mode.ToString(),
             BotDifficulty = state.BotDifficulty.ToString(),
+            Fleet = string.Join(',', state.Fleet),
             Columns = state.Size.Columns,
             Rows = state.Size.Rows,
             StartedAt = DateTimeOffset.UtcNow,
@@ -149,7 +150,8 @@ public sealed class SqliteGameRepository(BattleShipDbContext db, GameCache cache
             PlayerFrom(seats[0], size),
             PlayerFrom(seats[1], size),
             EnumNames<BotDifficulty>.Parse(record.BotDifficulty),
-            [.. record.Shots.OrderBy(shot => shot.Ordinal).Select(shot => new Coordinates(shot.Column, shot.Row))]);
+            [.. record.Shots.OrderBy(shot => shot.Ordinal).Select(shot => new Coordinates(shot.Column, shot.Row))],
+            FleetFrom(record.Fleet));
 
         return cache.Remember(game);
     }
@@ -163,6 +165,11 @@ public sealed class SqliteGameRepository(BattleShipDbContext db, GameCache cache
         IsBot = player.IsBot,
         Ships = [.. player.Fleet.Select(placement => ShipOf(placement, player.Id))]
     };
+
+    private static IReadOnlyList<ShipKind> FleetFrom(string stored) =>
+        string.IsNullOrEmpty(stored)
+            ? FleetTemplate.Standard
+            : [.. stored.Split(',').Select(name => EnumNames<ShipKind>.Parse(name))];
 
     private static ShipRecord ShipOf(ShipPlacement placement, Guid playerId) => new()
     {

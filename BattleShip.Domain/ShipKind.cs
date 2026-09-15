@@ -6,7 +6,10 @@ public enum ShipKind
     Battleship,
     Cruiser,
     Submarine,
-    Destroyer
+    Destroyer,
+
+    /// <summary>Une seule case. Voir ADR 0013 : il invalide le damier de pas 2.</summary>
+    PatrolBoat
 }
 
 public static class ShipKindExtensions
@@ -18,6 +21,7 @@ public static class ShipKindExtensions
         ShipKind.Cruiser => 3,
         ShipKind.Submarine => 3,
         ShipKind.Destroyer => 2,
+        ShipKind.PatrolBoat => 1,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
 }

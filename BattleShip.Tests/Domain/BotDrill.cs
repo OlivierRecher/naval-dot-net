@@ -10,7 +10,8 @@ namespace BattleShip.Tests.Domain;
 internal static class BotDrill
 {
     public static GameView ViewOf(BoardSize size, IReadOnlyList<RevealedCell> fired) =>
-        new(Guid.Empty, GameStatus.InProgress, GameMode.Solo, size, "Bot", "Humain", true, [], [], fired, BotDifficulty.Random, [], null);
+        new(Guid.Empty, GameStatus.InProgress, GameMode.Solo, size, "Bot", "Humain", true, [], [], fired, BotDifficulty.Random, [],
+            [.. FleetTemplate.Standard.Select(kind => new ShipToPlace(kind, kind.Size()))], null);
 
     public static int ShotsToClear(IBotStrategy strategy, Board target, BoardSize size)
     {

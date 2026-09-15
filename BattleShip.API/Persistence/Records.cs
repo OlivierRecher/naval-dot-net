@@ -13,6 +13,13 @@ public sealed class GameRecord
 
     public string BotDifficulty { get; set; } = string.Empty;
 
+    /// <summary>
+    /// La composition, en noms séparés par des virgules. Ce n'est pas une donnée
+    /// relationnelle : c'est un gabarit, jamais interrogé ligne à ligne, et le
+    /// normaliser ferait une table de plus pour un champ qu'on relit d'un bloc.
+    /// </summary>
+    public string Fleet { get; set; } = string.Empty;
+
     public int Columns { get; set; }
 
     public int Rows { get; set; }

@@ -119,3 +119,17 @@ GET {{api}}/games?limit=20
 
 ### Statistiques globales
 GET {{api}}/stats
+
+### Partie à flotte personnalisée : un croiseur et deux vedettes
+POST {{api}}/games
+Content-Type: application/json
+
+{ "playerName": "Olivier", "columns": 10, "rows": 10, "mode": "Solo", "botDifficulty": "HuntTargetParity",
+  "fleetPlacement": "Random", "fleet": ["Cruiser", "PatrolBoat", "PatrolBoat"] }
+
+### Flotte trop dense : 400 produit par la règle de composition
+POST {{api}}/games
+Content-Type: application/json
+
+{ "playerName": "Olivier", "columns": 8, "rows": 8, "mode": "Solo", "botDifficulty": "Random",
+  "fleetPlacement": "Random", "fleet": ["Carrier","Carrier","Carrier","Carrier","Carrier","Carrier","Carrier","Carrier"] }

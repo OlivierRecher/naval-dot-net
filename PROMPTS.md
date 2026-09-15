@@ -763,3 +763,144 @@ distingue. La seconde est la plus instructive — le correctif introduisait une
 distinction juste, et rien ne la protégeait.
 
 **Commits** : branche `feat/persistance`, PR #7.
+
+---
+
+## 2026-09-15 — Personnalisation : taille de grille et composition de flotte
+
+**Outil / modèle** : Claude Code (Opus 5)
+
+**Contexte**
+Item 6, dernier du backlog. Deux ADR précédents lui avaient laissé une dette
+explicite : l'ADR 0010 notait que le gabarit de flotte était en dur dans
+`Game.PlaceFleetFromClient`, et l'ADR 0009 annonçait que le damier du bot
+`Vétéran` deviendrait **incorrect** — pas seulement moins bon — le jour où un
+navire d'une seule case existerait.
+
+**Prompt**
+Livrer la personnalisation de la flotte, la taille de grille étant déjà
+paramétrable depuis le socle. Commencer par la dette de l'ADR 0009 : rendre le
+cas d'un navire d'une case atteignable, vérifier que la limite annoncée est
+réelle, puis corriger. Trancher ensuite ce qu'une composition doit respecter
+pour être acceptée — et justifier chaque borne plutôt que de la choisir.
+
+**Réponse résumée**
+
+| Sujet | Décision |
+|---|---|
+| Où vit la composition | Sur `Game`, comme le mode et la difficulté. Fixée à la création, persistée avec la partie |
+| Ce qu'elle doit respecter | Non vide, ≤ 15 navires, aucun navire plus long que la grille, ≤ 1/3 de la grille occupé |
+| Le plafond de densité | **Mesuré, pas choisi** : la flotte la plus dense acceptée se place sur 200 graines sans un échec |
+| Le damier du bot | Le pas suit le **plus petit navire** de la flotte — généralisation de la règle d'origine |
+| Longueurs | Restent attachées aux types : on choisit combien de navires de quels types |
+
+**Décision** : acceptée.
+
+Le point qui compte est le damier. La formulation d'origine — « un navire de deux
+cases croise une case sur deux » — n'était que l'instance L = 2 de « un navire de
+longueur L croise une maille de pas L ». La correction n'est donc pas un cas
+particulier ajouté mais une règle générale écrite ; la flotte classique retrouve
+le damier d'origine sans qu'on l'y force. Voir `REVUE-IA.md`, revue 9.
+
+Le plafond de densité mérite aussi d'être défendu : il refuse des flottes qui
+*pourraient* tenir. La raison est que le placement aléatoire échoue de façon
+**aléatoire** au-delà d'une certaine densité — le même joueur verrait la même
+composition acceptée puis refusée. Le plafond échange une acceptation aléatoire
+contre un refus prévisible, et sa valeur est établie par exécution.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 246 tests, 0 échec (221 avant l'item) |
+| Damier, flotte classique | Une case sur deux, 100 graines |
+| Damier, navire d'une case | Couvre toute la grille — la limite de l'ADR 0009 est soldée |
+| Damier, plus petit navire de 3, 4, 5 | Pas 3, 4, 5 |
+| Plafond de densité | Flotte la plus dense acceptée, placée sur 200 graines sans un échec |
+| Placement manuel | Contrôle la composition **de la partie** — dette de l'ADR 0010 |
+| Flotte personnalisée après redémarrage | Retrouvée à l'identique |
+| Parcours navigateur | Flotte réduite à un croiseur, un torpilleur et une vedette ; garde de densité déclenché à 37 % ; partie jouée |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- Le **coût** du damier n'a pas été remesuré par composition. On sait que le pas
+  est correct pour chaque flotte ; on ne sait pas si `HuntTargetParity` reste
+  meilleur que `HuntTarget` hors flotte classique. Les tests de classement de
+  l'item 2 ne portent que sur la flotte standard.
+- Le plafond d'un tiers est établi sur la plus petite grille autorisée. Il est
+  plus conservateur sur les grandes.
+- Rien n'empêche une flotte de ne contenir que des vedettes, ce qui réduit le
+  niveau `Vétéran` au niveau `Chasseur` sans que l'interface le dise.
+
+**Constat de méthode**
+Deux des six mutations de cet item n'étaient d'abord détectées **que** par les
+tests de domaine. Côté API, une flotte impossible finit aussi en 400 — par échec
+du placement aléatoire, pas par la validation. Le statut seul ne distinguait donc
+pas le refus déterministe du refus par hasard, alors que c'est précisément la
+différence que la règle introduit. Le test d'API vérifie désormais la **forme** de
+la réponse.
+
+**Commits** : branche `feat/personnalisation`, PR #8.
+
+---
+
+## 2026-09-15 — Traitement de la revue de la PR #8
+
+**Outil / modèle** : Claude Code (Opus 5) · relecteur : GitHub Copilot code review
+
+**Contexte**
+Huit commentaires sur le dernier item. Trois portaient sur des **tests qui ne
+testaient pas ce qu'ils annonçaient**, ce qui est devenu le motif récurrent de ce
+projet.
+
+**Réponse résumée**
+
+| # | Remarque | Traitement |
+|---|---|---|
+| 1 | `EnsureCreated` ne modifie pas un schéma existant : la colonne `Fleet` casse toute base antérieure | Retenue — la plus sérieuse |
+| 2 | Le test de densité ne construit pas la flotte la plus dense acceptée | Retenue |
+| 3 | Le test du damier à une case n'exclut pas un pas de 3 | Retenue |
+| 4 | Le README ne suit pas l'item 6 | Retenue |
+| 5 | Les compteurs de flotte n'ont pas de nom accessible | Retenue |
+| 6 | La classe de test s'appelle encore `ScanLattice`, le domaine dit `ScanStride` | Retenue |
+| 7 | Le glossaire dit qu'un navire occupe « plusieurs cases », or la vedette en occupe une | Retenue |
+
+**Décision** : 8 retenues sur 8.
+
+La première **falsifie une affirmation de l'ADR 0012** — « le périmètre ne
+comporte aucune évolution de schéma à rejouer » — un item après qu'elle a été
+écrite. Voir `REVUE-IA.md`, revue 10.
+
+La septième est la plus révélatrice du fonctionnement de ce dépôt : en ajoutant
+la vedette, l'item a rendu **fausse une phrase du glossaire** qu'il n'avait pas
+touchée. Aucun test ne pouvait le voir ; un relecteur qui lit le diff contre la
+documentation, si.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 248 tests, 0 échec (246 avant la revue) |
+| Défaut n° 1 reproduit | `ALTER TABLE Games DROP COLUMN Fleet` puis écriture → « table Games has no column named Fleet » |
+| Mutation — mise à niveau de schéma retirée | 1 test au rouge |
+| Mutation — pas du damier forcé à 3 | 2 tests au rouge — ce que l'ancien test ne détectait pas |
+| Mutation — plafond de densité relevé | 1 test au rouge |
+| Compatibilité amont | Une partie écrite sans composition se relit avec la flotte classique |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- La mise à niveau ne sait qu'**ajouter des colonnes**. Seule l'ADR 0013 dit que
+  toute autre évolution demandera des migrations ; rien dans le code ne l'empêche.
+- Le test reconstitue l'ancien schéma en **supprimant** une colonne d'une base
+  neuve, ce qui n'est pas exactement une base produite par la version précédente.
+- L'accessibilité n'est vérifiée que par la présence des `aria-label` : aucun
+  lecteur d'écran n'a été essayé.
+
+**Constat de méthode**
+Trois des huit remarques portaient sur des tests, et aucune sur un défaut du code
+testé. Le motif est constant depuis la revue 2 : ce qui échappe le plus
+facilement, ce n'est pas le code, c'est **l'écart entre ce qu'un test affirme
+protéger et ce qu'il protège réellement**. Un test porte un nom, une
+documentation, une intention — et rien de tout cela n'est exécuté.
+
+**Commits** : branche `feat/personnalisation`, PR #8.
