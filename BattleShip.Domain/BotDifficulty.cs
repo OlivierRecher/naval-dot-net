@@ -17,17 +17,28 @@ public static class BotDifficulties
     /// hors énumération, que <c>Enum.IsDefined</c> rattrape mais que <c>"0"</c>
     /// contourne. Le nom est donc comparé, pas parsé.
     /// </summary>
-    public static bool TryParse(string? name, out BotDifficulty level)
+    public static bool TryParse(string? name, out BotDifficulty difficulty)
     {
-        level = default;
+        difficulty = default;
 
         if (name is null || !Names.Contains(name, StringComparer.OrdinalIgnoreCase))
         {
             return false;
         }
 
-        level = Enum.Parse<BotDifficulty>(name, ignoreCase: true);
+        difficulty = Enum.Parse<BotDifficulty>(name, ignoreCase: true);
 
         return true;
     }
+
+    /// <summary>
+    /// Pour les appelants situés derrière le filtre de validation (ADR 0006),
+    /// qui garantit déjà un nom connu. Lève plutôt que de retomber sur une
+    /// valeur par défaut : le jour où le filtre sauterait, l'appel échoue au
+    /// lieu de servir silencieusement un bot dégradé.
+    /// </summary>
+    public static BotDifficulty Parse(string? name) =>
+        TryParse(name, out var difficulty)
+            ? difficulty
+            : throw new ArgumentOutOfRangeException(nameof(name), name, "Difficulté de bot inconnue.");
 }

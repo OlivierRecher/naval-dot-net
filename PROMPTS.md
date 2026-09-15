@@ -270,3 +270,90 @@ Décisions structurantes, toutes tracées dans l'ADR 0009 :
   reste du front : vérifié à la main dans le navigateur.
 
 **Commits** : branche `feat/difficultes-de-bot`, PR #4.
+
+---
+
+## 2026-09-15 — Traitement de la revue de la PR #4
+
+**Outil / modèle** : Claude Code (Opus 5) · relecteurs : GitHub Copilot code review + une relecture adverse déléguée
+
+**Contexte**
+La PR #4 livrait les trois difficultés. Deux relectures indépendantes ont été
+conduites sans se voir : Copilot sur le diff, et un agent adverse mandaté pour
+trouver des défauts réels dans `HuntTargetBot` — bornes, cases rejouées,
+diagonales, concurrence — avec interdiction de modifier le dépôt.
+
+L'intérêt de l'indépendance est mesurable : **les deux ont trouvé le même défaut
+principal**, ce qu'aucune des deux seule n'aurait établi, et **chacune en a
+trouvé un que l'autre a manqué**.
+
+**Prompt**
+Traiter chaque remarque en séparant le défaut signalé du remède proposé. Ne rien
+écrire dans un livrable noté sans l'avoir vérifié soi-même, y compris les mesures
+rapportées par l'agent — une remarque produite par une IA n'a pas plus d'autorité
+qu'une autre production d'IA.
+
+**Réponse résumée**
+
+| # | Source | Remarque | Traitement |
+|---|---|---|---|
+| 1 | Copilot ×4 **et** adverse | La PR ajoute `Level`/`Niveau` aux mots écartés de `CONTEXT.md` **et** les emploie ~20 fois, dont le message du 400 envoyé au client | Retenue |
+| 2 | Copilot | `ANewGame_WithoutAnExplicitDifficulty_PlaysAtRandom` passe `BotDifficulty.Random` explicitement : il ne teste pas le défaut qu'il nomme | Retenue |
+| 3 | Adverse | L'ADR affirme « la liaison réussit toujours » ; faux pour une valeur JSON non textuelle | Retenue, **vérifiée avant correction** |
+| 4 | Adverse | L'endpoint jetait le booléen de `TryParse` : une difficulté non reconnue serait devenue `Random` en silence | Retenue, **corrigée autrement que suggéré** |
+| 5 | Adverse | Le garde `Math.Max(…, 0)` de `Between` est une branche morte | Retenue |
+| 6 | Adverse | La « limite assumée » de la résolution est le cas majoritaire, pas un cas de bord | Retenue, **vérifiée indépendamment** |
+| 7 | Adverse | `Play.razor` utilise `First` là où `LabelOf` utilise `FirstOrDefault` | Retenue |
+| 8 | Adverse | `damaged` inclut les cases `Sunk` alors que c'est redondant | **Écartée** |
+
+**Décision** : 7 retenues, 1 écartée, 1 corrigée autrement que proposé.
+
+Deux points méritent d'être détaillés.
+
+1. **Le correctif proposé au n° 4 aurait contredit l'ADR 0006.** L'agent
+   proposait un `if (!TryParse(...)) return Problem(400)` dans l'endpoint. Or
+   l'ADR 0006 pose que la validation vit dans un filtre générique, « pas d'appel
+   manuel répété dans chaque endpoint » : ajouter un contrôle manuel aurait
+   défait la décision qu'il trace. Le diagnostic était juste — la dégradation
+   silencieuse est le pire mode de défaillance — mais le remède devait venir
+   d'ailleurs. Retenu à la place : `BotDifficulties.Parse`, qui **lève**. Si le
+   filtre sautait, l'appel échoue bruyamment au lieu de servir un bot dégradé, et
+   aucune validation n'est dupliquée.
+2. **Le n° 8 est écarté.** L'argument est correct : une chaîne de cases touchées
+   reliant une case à un navire coulé n'a jamais besoin de traverser une **autre**
+   case coulée, celle-ci serait un point d'arrivée plus proche et valide. Mais
+   `damaged` signifie « touchée ou coulée » ; restreindre à `Hit` optimiserait la
+   couverture de mutation au prix de la lisibilité du prédicat. Une expression
+   redondante dont la redondance est **démontrable** n'est pas un défaut.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 134 tests, 0 échec (130 avant la revue) |
+| Affirmation n° 3, refaite par sondes HTTP | `"Expert"`, `""`, `null` → `ValidationProblem` ; `2`, `true`, `["HuntTarget"]` → `BadHttpRequestException`, en amont du filtre. **L'agent avait raison** |
+| Affirmation n° 6, refaite avec une sonde posée sur le calcul du bot | **1018 / 2000 = 50,9 %** des parties contiennent au moins une case d'un navire à flot classée coulée — chiffre identique à celui rapporté |
+| Nouveaux tests épinglant ces deux comportements | `CreateGame_WithANonTextualDifficulty_IsRefusedByTheBinderNotTheValidator`, `CreateGame_WithADifficultyInAnotherCase_StoresTheCanonicalName` |
+| Vocabulaire après renommage | `grep -n "level\|Level\|Niveau"` sur les cinq projets : aucune occurrence |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- Le chemin `BotDifficulties.Parse` lève **uniquement si le filtre de validation
+  disparaît**. Aucun test ne l'instancie : c'est une défense en profondeur, pas
+  un comportement couvert.
+- La mesure des 50,9 % a été obtenue avec une sonde **ajoutée puis retirée** du
+  domaine. Elle n'est pas rejouée par `dotnet test` et demande de reposer la
+  sonde pour être reproduite.
+- L'agent adverse rapporte 11 mutations sur 13 détectées par la suite, les deux
+  survivantes étant des branches mortes. Ce chiffre **n'a pas été refait** : il
+  est cité comme une observation de l'agent, pas comme un résultat vérifié.
+
+**Constat de méthode**
+Deux relecteurs indépendants sur le même diff ne coûtent presque rien et ne se
+recouvrent pas : Copilot lit le diff et compare le code à ce que la PR déclare —
+c'est ainsi qu'il a vu que le glossaire ajouté était violé par le code ajouté, et
+que le test du défaut ne testait pas le défaut. L'agent adverse exécute, mesure
+et mute — c'est ainsi qu'il a trouvé une affirmation d'ADR contredite par une
+sonde HTTP. Aucun des deux n'aurait produit les trouvailles de l'autre.
+
+**Commits** : branche `feat/difficultes-de-bot`, PR #4.

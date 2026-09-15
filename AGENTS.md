@@ -122,8 +122,10 @@ PUT    /games/{id}/fleet      → 200 | 400 | 409        (placement manuel)
 - **404** : partie inconnue.
 - `POST /games` reçoit la **difficulté du bot** sous forme de **nom** —
   `Random`, `HuntTarget` ou `HuntTargetParity`. Un `string` et non
-  l'énumération : une valeur inconnue doit produire un 400 de FluentValidation,
-  pas une erreur de désérialisation en amont du filtre. Voir ADR 0009.
+  l'énumération : un nom inconnu doit produire un 400 de FluentValidation, pas
+  une erreur de désérialisation en amont du filtre. La garantie porte sur les
+  **chaînes** JSON ; un nombre ou un tableau reste refusé par la liaison, avec
+  un 400 de forme différente. Voir ADR 0009.
 
 ### gRPC-Web — opération `Fire`
 

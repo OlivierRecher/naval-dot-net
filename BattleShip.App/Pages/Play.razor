@@ -30,14 +30,14 @@
         <label class="form-label" for="side">Taille de la grille</label>
         <input id="side" type="number" min="8" max="20" class="form-control mb-3" @bind="_side" />
 
-        <label class="form-label" for="level">Difficulté du bot</label>
-        <select id="level" class="form-select" @bind="_botDifficulty">
+        <label class="form-label" for="difficulty">Difficulté du bot</label>
+        <select id="difficulty" class="form-select" @bind="_botDifficulty">
             @foreach (var option in BotDifficultyCatalog.All)
             {
                 <option value="@option.Name">@option.Label</option>
             }
         </select>
-        <p class="form-text mb-3">@BotDifficultyCatalog.All.First(option => option.Name == _botDifficulty).Summary</p>
+        <p class="form-text mb-3">@BotDifficultyCatalog.SummaryOf(_botDifficulty)</p>
 
         <button class="btn btn-primary" @onclick="StartAsync" disabled="@Session.IsBusy">
             @(Session.IsBusy ? "Création…" : "Lancer la partie")

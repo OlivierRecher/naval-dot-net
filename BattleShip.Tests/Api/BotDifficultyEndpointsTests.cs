@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using BattleShip.Domain;
 using BattleShip.Models;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -17,11 +18,11 @@ public class BotDifficultyEndpointsTests(WebApplicationFactory<Program> factory)
 
         public List<BotDifficulty> Requested { get; } = [];
 
-        public IBotStrategy For(BotDifficulty level)
+        public IBotStrategy For(BotDifficulty difficulty)
         {
-            Requested.Add(level);
+            Requested.Add(difficulty);
 
-            return _real.For(level);
+            return _real.For(difficulty);
         }
     }
 
@@ -29,16 +30,16 @@ public class BotDifficultyEndpointsTests(WebApplicationFactory<Program> factory)
     [InlineData("Random")]
     [InlineData("HuntTarget")]
     [InlineData("HuntTargetParity")]
-    public async Task CreateGame_EchoesTheLevelItWasGiven(string level)
+    public async Task CreateGame_EchoesTheDifficultyItWasGiven(string difficulty)
     {
         var client = factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, level));
+        var response = await client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, difficulty));
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         var view = await response.Content.ReadFromJsonAsync<GameViewResponse>();
-        Assert.Equal(level, view!.BotDifficulty);
+        Assert.Equal(difficulty, view!.BotDifficulty);
     }
 
     /// <summary>
@@ -47,7 +48,7 @@ public class BotDifficultyEndpointsTests(WebApplicationFactory<Program> factory)
     /// fabrique, à qui l'endpoint doit réclamer ce niveau-là.
     /// </summary>
     [Fact]
-    public async Task PlayBotTurn_AsksTheFactoryForTheLevelChosenAtCreation()
+    public async Task PlayBotTurn_AsksTheFactoryForTheDifficultyChosenAtCreation()
     {
         var strategies = new RecordingStrategyFactory();
 
@@ -68,7 +69,7 @@ public class BotDifficultyEndpointsTests(WebApplicationFactory<Program> factory)
     }
 
     [Fact]
-    public async Task CreateGame_WithAnUnknownLevel_NamesTheAcceptedOnes()
+    public async Task CreateGame_WithAnUnknownDifficulty_NamesTheAcceptedOnes()
     {
         var client = factory.CreateClient();
 
@@ -79,12 +80,55 @@ public class BotDifficultyEndpointsTests(WebApplicationFactory<Program> factory)
     }
 
     /// <summary>
+    /// Le nom voyage en texte pour que le filtre de validation puisse refuser une
+    /// valeur inconnue (ADR 0006). Cela ne vaut que pour une **chaîne** JSON : un
+    /// nombre, un booléen ou un tableau échouent à la liaison, en amont du
+    /// filtre. Le statut reste 400, la forme de la réponse change.
+    /// </summary>
+    [Theory]
+    [InlineData("2")]
+    [InlineData("true")]
+    [InlineData("""["HuntTarget"]""")]
+    public async Task CreateGame_WithANonTextualDifficulty_IsRefusedByTheBinderNotTheValidator(string raw)
+    {
+        var client = factory.CreateClient();
+        var body = new StringContent(
+            $$"""{"playerName":"Olivier","columns":10,"rows":10,"botDifficulty":{{raw}}}""",
+            Encoding.UTF8, "application/json");
+
+        var response = await client.PostAsync("/games", body);
+        var problem = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("BadHttpRequestException", problem);
+        Assert.DoesNotContain("errors", problem);
+    }
+
+    /// <summary>
+    /// Le nom est reconnu sans égard à la casse, mais la partie retient la valeur
+    /// canonique : c'est elle que le client reçoit, et c'est elle que le catalogue
+    /// du front sait traduire en libellé.
+    /// </summary>
+    [Fact]
+    public async Task CreateGame_WithADifficultyInAnotherCase_StoresTheCanonicalName()
+    {
+        var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/games", new CreateGameRequest("Olivier", 10, 10, "hunttargetparity"));
+        var view = await response.Content.ReadFromJsonAsync<GameViewResponse>();
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal("HuntTargetParity", view!.BotDifficulty);
+    }
+
+    /// <summary>
     /// Le catalogue proposé par le front et l'énumération acceptée par le
     /// serveur vivent dans deux projets qui ne se référencent pas. Ce test est
     /// le seul endroit où leur accord est vérifié.
     /// </summary>
     [Fact]
-    public void TheSharedCatalog_NamesEveryLevelOfTheDomain_AndNothingElse() =>
+    public void TheSharedCatalog_NamesEveryDifficultyOfTheDomain_AndNothingElse() =>
         Assert.Equal(
             BotDifficulties.Names.Order(),
             BotDifficultyCatalog.All.Select(option => option.Name).Order());

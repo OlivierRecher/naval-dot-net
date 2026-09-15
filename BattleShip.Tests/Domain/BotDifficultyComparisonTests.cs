@@ -31,9 +31,9 @@ public class BotDifficultyComparisonTests
     [InlineData(BotDifficulty.Random, 90, 100)]
     [InlineData(BotDifficulty.HuntTarget, 55, 75)]
     [InlineData(BotDifficulty.HuntTargetParity, 50, 70)]
-    public void EachLevel_ClearsAFleetWithinItsExpectedRange(BotDifficulty level, int floor, int ceiling)
+    public void EachDifficulty_ClearsAFleetWithinItsExpectedRange(BotDifficulty difficulty, int floor, int ceiling)
     {
-        var average = level switch
+        var average = difficulty switch
         {
             BotDifficulty.Random => Chance,
             BotDifficulty.HuntTarget => Hunt,

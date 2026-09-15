@@ -10,11 +10,11 @@ public class BotStrategyFactoryTests
     [InlineData(BotDifficulty.Random, typeof(RandomBot))]
     [InlineData(BotDifficulty.HuntTarget, typeof(HuntTargetBot))]
     [InlineData(BotDifficulty.HuntTargetParity, typeof(HuntTargetParityBot))]
-    public void For_MapsEachLevelToItsOwnStrategy(BotDifficulty level, Type expected) =>
-        Assert.Equal(expected, _factory.For(level).GetType());
+    public void For_MapsEachDifficultyToItsOwnStrategy(BotDifficulty difficulty, Type expected) =>
+        Assert.Equal(expected, _factory.For(difficulty).GetType());
 
     [Fact]
-    public void For_OnALevelOutsideTheEnumeration_Throws() =>
+    public void For_OnADifficultyOutsideTheEnumeration_Throws() =>
         Assert.Throws<ArgumentOutOfRangeException>(() => _factory.For((BotDifficulty)42));
 }
 
@@ -27,8 +27,8 @@ public class BotDifficultiesTests
     [InlineData("huntTargetParity", BotDifficulty.HuntTargetParity)]
     public void TryParse_OnAKnownName_Succeeds(string name, BotDifficulty expected)
     {
-        Assert.True(BotDifficulties.TryParse(name, out var level));
-        Assert.Equal(expected, level);
+        Assert.True(BotDifficulties.TryParse(name, out var difficulty));
+        Assert.Equal(expected, difficulty);
     }
 
     /// <summary>
@@ -47,6 +47,6 @@ public class BotDifficultiesTests
         Assert.False(BotDifficulties.TryParse(candidate, out _));
 
     [Fact]
-    public void Names_ListsEveryLevel() =>
+    public void Names_ListsEveryDifficulty() =>
         Assert.Equal(Enum.GetValues<BotDifficulty>().Length, BotDifficulties.Names.Count);
 }

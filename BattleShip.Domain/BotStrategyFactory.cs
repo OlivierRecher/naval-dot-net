@@ -2,7 +2,7 @@ namespace BattleShip.Domain;
 
 public interface IBotStrategyFactory
 {
-    IBotStrategy For(BotDifficulty level);
+    IBotStrategy For(BotDifficulty difficulty);
 }
 
 /// <summary>
@@ -12,11 +12,11 @@ public interface IBotStrategyFactory
 /// </summary>
 public sealed class BotStrategyFactory(Random random) : IBotStrategyFactory
 {
-    public IBotStrategy For(BotDifficulty level) => level switch
+    public IBotStrategy For(BotDifficulty difficulty) => difficulty switch
     {
         BotDifficulty.Random => new RandomBot(random),
         BotDifficulty.HuntTarget => new HuntTargetBot(random),
         BotDifficulty.HuntTargetParity => new HuntTargetParityBot(random),
-        _ => throw new ArgumentOutOfRangeException(nameof(level), level, "Niveau de bot inconnu.")
+        _ => throw new ArgumentOutOfRangeException(nameof(difficulty), difficulty, "Difficulté de bot inconnue.")
     };
 }

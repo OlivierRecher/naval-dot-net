@@ -34,14 +34,11 @@ public static class GameEndpoints
     {
         var size = new BoardSize(request.Columns, request.Rows);
 
-        // Le filtre de validation a deja refuse tout niveau inconnu.
-        BotDifficulties.TryParse(request.BotDifficulty, out var level);
-
         try
         {
             var human = new Player(request.PlayerName, isBot: false, placer.Place(size, FleetTemplate.Standard));
             var bot = new Player("Bot", isBot: true, placer.Place(size, FleetTemplate.Standard));
-            var game = new Game(GameMode.Solo, human, bot, level);
+            var game = new Game(GameMode.Solo, human, bot, BotDifficulties.Parse(request.BotDifficulty));
 
             repository.Add(game);
 

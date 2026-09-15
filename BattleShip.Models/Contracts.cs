@@ -63,4 +63,7 @@ public static class BotDifficultyCatalog
 
     public static string LabelOf(string? name) =>
         All.FirstOrDefault(option => option.Name == name)?.Label ?? name ?? string.Empty;
+
+    public static string SummaryOf(string? name) =>
+        All.FirstOrDefault(option => option.Name == name)?.Summary ?? string.Empty;
 }

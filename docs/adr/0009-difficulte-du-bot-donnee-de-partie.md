@@ -66,11 +66,23 @@ Trois points la justifient.
 ### Le nom voyage en texte, pas en énumération
 `CreateGameRequest.BotDifficulty` est un `string`, pas l'énumération.
 
-Une énumération dans le DTO ferait échouer la **désérialisation** sur une valeur
-inconnue, avant que le filtre de validation (ADR 0006) ait pu s'exécuter : le
+Une énumération dans le DTO ferait échouer la **désérialisation** sur tout nom
+inconnu, avant que le filtre de validation (ADR 0006) ait pu s'exécuter : le
 client recevrait une erreur de format au lieu du `ValidationProblem` uniforme que
-l'ADR 0006 promet. Avec un `string`, la liaison réussit toujours et c'est
+l'ADR 0006 promet. Avec un `string`, toute **chaîne** JSON se lie et c'est
 FluentValidation qui refuse.
+
+Le `string` déplace la frontière, il ne la supprime pas — vérifié par sondes sur
+`POST /games` :
+
+| `botDifficulty` | Statut | Forme |
+|---|---|---|
+| `"Expert"`, `""`, `null`, champ absent | 400 | `ValidationProblem` — le filtre a parlé |
+| `2`, `true`, `["HuntTarget"]` | 400 | `BadHttpRequestException` — la **liaison** a refusé, en amont du filtre |
+
+Le statut reste 400 dans les deux cas, donc le client n'a rien à distinguer ; la
+forme du corps, elle, diffère. Le comportement est épinglé par
+`CreateGame_WithANonTextualDifficulty_IsRefusedByTheBinderNotTheValidator`.
 
 La validation compare le nom à `BotDifficulties.Names`. Elle **n'utilise pas**
 `Enum.TryParse`, vérifié par exécution :
@@ -99,12 +111,16 @@ est la liste des noms, pas la représentation entière.
   que le plus petit navire occupe deux cases adjacentes. Le jour où la flotte
   devient personnalisable (item 6), un navire d'une seule case rendrait ce niveau
   incorrect, pas seulement moins bon.
-- **Limite assumée — la résolution des navires coulés est approchée.** Le bot
-  déduit qu'une case touchée appartient à un navire coulé si elle est alignée
-  avec une case `Sunk`, sans case intacte entre les deux. Le contact entre
-  navires étant autorisé (`AGENTS.md` § 3), deux navires alignés et mitoyens se
-  confondent : le bot retourne chasser trop tôt. Il perd de l'efficacité, il ne
-  tire jamais un coup interdit.
+- **Limite assumée — la résolution des navires coulés est approchée, et se
+  trompe dans une partie sur deux.** Le bot déduit qu'une case touchée appartient
+  à un navire coulé si elle est alignée avec une case `Sunk`, sans case intacte
+  entre les deux. Le contact entre navires étant autorisé (`AGENTS.md` § 3), deux
+  navires alignés et mitoyens se confondent. Ce n'est pas un cas de bord : mesuré
+  sur 2 000 parties en comparant le calcul du bot à la vérité terrain, **50,9 %
+  des parties** contiennent au moins une case d'un navire encore à flot classée à
+  tort comme coulée. Le bot retourne alors chasser trop tôt ; il perd de
+  l'efficacité — c'est déjà compté dans les 1,31 tir ci-dessous — et il ne tire
+  jamais un coup interdit.
 - **Compromis délibéré — la résolution coûte des tirs et on la garde quand
   même.** Mesurée, elle dégrade `HuntTarget` de 1,31 tir. Elle est conservée
   parce que le critère n'est pas le nombre de tirs mais ce que la difficulté
@@ -164,8 +180,21 @@ Contrôles de mutation exécutés, chacun rétabli ensuite :
 | Validation par `Enum.TryParse` | 1 / 18 |
 | Catalogue partagé désynchronisé | 1 / 6 |
 
-À réexaminer le jour de l'item 6 (flotte personnalisable), qui peut invalider le
-damier, et le jour de SQLite (item 5), où la difficulté devra être persistée.
+À réexaminer :
+
+- **Item 6 (flotte personnalisable)**, qui peut invalider le damier — un navire
+  d'une seule case rendrait `HuntTargetParity` incorrect.
+- **Item 6 encore**, pour un piège de signature : `IBotStrategy.ChooseTarget(view,
+  size)` reçoit dans `view.Size` la grille **du bot** et dans `size` celle de
+  **l'adversaire**. Elles sont identiques tant que la taille n'est pas
+  paramétrable. `HuntTargetBot` n'utilise que `size`, ce qui est correct ; rien
+  n'empêche une future stratégie de lire `view.Size` par erreur.
+- **Item 5 (SQLite)**, où la difficulté devra être persistée.
+- **Toute stratégie qui retiendrait un état entre deux tours** : la fabrique en
+  construit une neuve à chaque appel, donc une file de cibles mémorisée serait
+  silencieusement réinitialisée. Le Singleton n'est légitime que tant que les
+  stratégies sont des fonctions pures de la `GameView`, et aucun test ne protège
+  cette propriété.
 
 ## Références
 - ADR 0003 (serveur autoritaire), ADR 0004 (`IGameRepository`), ADR 0006 (validation par filtre)

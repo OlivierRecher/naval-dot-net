@@ -22,8 +22,8 @@ public sealed class CreateGameRequestValidator : AbstractValidator<CreateGameReq
             .InclusiveBetween(MinBoardSide, MaxBoardSide);
 
         RuleFor(request => request.BotDifficulty)
-            .Must(level => BotDifficulties.TryParse(level, out _))
-            .WithMessage($"Niveau de bot inconnu : attendu {string.Join(", ", BotDifficulties.Names)}.");
+            .Must(difficulty => BotDifficulties.TryParse(difficulty, out _))
+            .WithMessage($"Difficulté de bot inconnue : attendu {string.Join(", ", BotDifficulties.Names)}.");
     }
 }
 

@@ -34,7 +34,7 @@ Content-Type: application/json
 
 { "column": 4, "row": 4 }
 
-### Niveau de bot inconnu : 400 produit par le filtre de validation
+### Difficulté de bot inconnue : 400 produit par le filtre de validation
 POST {{api}}/games
 Content-Type: application/json
 

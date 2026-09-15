@@ -87,8 +87,13 @@ public class HuntTargetBot(Random random) : IBotStrategy
                Between(from.Row, to.Row).All(row => damaged.Contains(new Coordinates(from.Column, row)));
     }
 
-    private static IEnumerable<int> Between(int one, int other) =>
-        Enumerable.Range(Math.Min(one, other) + 1, Math.Max(Math.Abs(one - other) - 1, 0));
+    private static IEnumerable<int> Between(int one, int other)
+    {
+        for (var value = Math.Min(one, other) + 1; value < Math.Max(one, other); value++)
+        {
+            yield return value;
+        }
+    }
 
     private static bool ExtendsALine(Coordinates cell, HashSet<Coordinates> pending) =>
         Steps.Any(step =>
