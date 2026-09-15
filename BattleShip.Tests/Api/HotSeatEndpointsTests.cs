@@ -163,4 +163,19 @@ public class HotSeatEndpointsTests(WebApplicationFactory<Program> factory)
         Assert.Equal("InProgress", started.Status);
         Assert.Equal("Olivier", started.ViewerName);
     }
+
+    [Fact]
+    public async Task TheView_NamesTheOpponent_AndCarriesNothingElseAboutHim()
+    {
+        var view = await CreateLocalGameAsync();
+
+        Assert.Equal("Olivier", view.ViewerName);
+        Assert.Equal("Ulysse", view.OpponentName);
+
+        // La seule chose que la réponse dit de l'adversaire est son nom : le type
+        // ne porte aucun membre capable de transporter sa flotte. Voir ADR 0003.
+        Assert.Equal(5, view.OwnFleet.Count);
+        Assert.Empty(view.ShotsFired);
+        Assert.Empty(view.ShotsReceived);
+    }
 }

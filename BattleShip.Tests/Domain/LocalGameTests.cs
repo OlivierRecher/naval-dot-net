@@ -103,4 +103,37 @@ public class LocalGameTests
         Assert.Equal(FireRejection.NotTheBotTurn,
             game.PlayBotTurn(new BotStrategyFactory(new Random(1)).For(game.BotDifficulty)).Rejection);
     }
+
+    /// <summary>
+    /// Remarque de la revue de la PR #6. Le front doit pouvoir armer la
+    /// passation dès que le tir est accepté, sans attendre la vue suivante :
+    /// sinon un rafraîchissement raté laisse la vue périmée du tireur, qui dit
+    /// encore « à vous » — et le serveur accepterait ce second tir comme celui
+    /// de l'adversaire. Il lui faut donc le nom du suivant, pas sa position.
+    /// </summary>
+    [Fact]
+    public void ViewForClient_NamesTheOpponent_SoTheHandoverNeedsNoRoundTrip()
+    {
+        var game = LocalGame();
+
+        var before = game.ViewForClient();
+        Assert.Equal("Olivier", before.ViewerName);
+        Assert.Equal("Ulysse", before.OpponentName);
+
+        game.FireFromClient(new Coordinates(0, 0));
+
+        var after = game.ViewForClient();
+        Assert.Equal("Ulysse", after.ViewerName);
+        Assert.Equal("Olivier", after.OpponentName);
+    }
+
+    [Fact]
+    public void ViewForClient_InASoloGame_NamesTheBotAsOpponent()
+    {
+        var placer = new RandomFleetPlacer(new Random(3));
+        var human = new Player("Olivier", isBot: false, placer.Place(BoardSize.Standard, FleetTemplate.Standard));
+        var bot = new Player("Bot", isBot: true, placer.Place(BoardSize.Standard, FleetTemplate.Standard));
+
+        Assert.Equal("Bot", new Game(GameMode.Solo, human, bot).ViewForClient().OpponentName);
+    }
 }

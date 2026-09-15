@@ -565,3 +565,67 @@ correctement généralisé — mais elle ne dit rien du travail restant, et l'av
 lue comme un avancement a coûté trois allers-retours au navigateur.
 
 **Commits** : branche `feat/hot-seat`, PR #6.
+
+---
+
+## 2026-09-15 — Traitement de la revue de la PR #6
+
+**Outil / modèle** : Claude Code (Opus 5) · relecteur : GitHub Copilot code review
+
+**Contexte**
+Un seul commentaire, sur `GameSession.FireAsync` : si le rafraîchissement échoue
+après un tir accepté, la passation n'est jamais armée et l'interface revient sur
+la vue périmée du tireur.
+
+**Prompt**
+Vérifier la conséquence annoncée avant de corriger — un relecteur qui décrit
+correctement un défaut peut en décrire incorrectement l'effet.
+
+**Réponse résumée**
+
+**Le diagnostic est juste, la conséquence annoncée est fausse, et la réalité est
+pire.** Copilot écrit que « la partie reste bloquée sur `NotTheClientTurn` ».
+Ce refus n'existe pas en hot-seat : il ne se déclenche que si le joueur courant
+est un **bot**, et une partie `Local` n'en a aucun.
+
+Ce qui se passe réellement : la vue périmée du tireur dit encore « à vous »,
+donc `CanFire` redevient vrai. S'il retire, `Game.FireFromClient` accepte — le
+serveur ne sait pas qui est au clavier, c'est précisément la décision de l'ADR
+0003. **Le premier joueur joue le tour du second sans que rien ne le signale.**
+
+La passation n'est donc pas un confort d'affichage de plus : c'est le **seul
+garde du tour** en hot-seat. Elle ne peut pas dépendre d'un appel qui peut
+échouer.
+
+Correction : la passation est armée **dès le tir accepté**, avant le
+rafraîchissement. Pour cela la `GameView` publie le **nom de l'adversaire** —
+un nom, jamais une position, et que le joueur connaît déjà. Confirmer est refusé
+tant que la vue suivante n'est pas arrivée : confirmer sur une vue périmée
+afficherait la flotte du joueur *précédent*. L'écran propose de réessayer.
+
+**Décision** : diagnostic retenu, conséquence corrigée, correctif étendu.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 195 tests, 0 échec (192 avant la revue) |
+| Mutation — la vue nomme le viewer au lieu de l'adversaire | 2 tests domaine + 1 test API au rouge |
+| Parcours navigateur après correction | Création, tir, passation, confirmation — inchangé |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- **Le chemin d'échec qui motive la correction n'a pas été déclenché.** Il
+  faudrait couper le réseau entre deux appels consécutifs du navigateur. La
+  correction est établie par lecture, pas par expérience.
+- Aucun test ne couvre `GameSession` : c'est la zone que `AGENTS.md` § 8 laisse
+  hors périmètre. Un `HttpMessageHandler` de test la rendrait accessible, et
+  c'est exactement ce qu'il faudrait pour éprouver ce chemin.
+
+**Constat de méthode**
+Une remarque peut être juste sur le défaut et fausse sur ses conséquences.
+Recopier la conséquence annoncée aurait produit un correctif correct et une
+justification erronée — donc une ligne d'ADR indéfendable à l'oral. Le défaut
+méritait d'être vérifié dans le domaine, pas seulement dans le fichier signalé.
+
+**Commits** : branche `feat/hot-seat`, PR #6.

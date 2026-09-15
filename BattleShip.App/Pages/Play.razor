@@ -78,9 +78,19 @@ else if (Session.IsAwaitingHandover)
             Rien n'est affiché tant que vous n'avez pas confirmé : l'écran suivant montre
             la flotte de @Session.HandoverTo.
         </p>
-        <button class="btn btn-primary mt-2" @onclick="ConfirmHandover">
-            Je suis @Session.HandoverTo, afficher mon tour
-        </button>
+        @if (Session.IsHandoverReady)
+        {
+            <button class="btn btn-primary mt-2" @onclick="ConfirmHandover">
+                Je suis @Session.HandoverTo, afficher mon tour
+            </button>
+        }
+        else
+        {
+            <p class="text-danger">L'état de la partie n'a pas pu être récupéré ; rien ne peut être affiché sans lui.</p>
+            <button class="btn btn-outline-danger mt-2" disabled="@Session.IsBusy" @onclick="RetryHandoverAsync">
+                @(Session.IsBusy ? "Récupération…" : "Réessayer")
+            </button>
+        }
     </div>
 }
 else if (Session.IsPlacingFleet)
@@ -355,6 +365,8 @@ else
         ClearFleet();
         Session.ConfirmHandover();
     }
+
+    private async Task RetryHandoverAsync() => await Session.RetryHandoverAsync();
 
     private async Task FireAsync(CoordinatesDto target) => await Session.FireAsync(target.Column, target.Row);
 

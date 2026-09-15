@@ -48,6 +48,7 @@ public sealed record GameViewResponse(
     int Columns,
     int Rows,
     string ViewerName,
+    string OpponentName,
     bool IsViewerTurn,
     IReadOnlyList<ShipDto> OwnFleet,
     IReadOnlyList<CoordinatesDto> ShotsReceived,

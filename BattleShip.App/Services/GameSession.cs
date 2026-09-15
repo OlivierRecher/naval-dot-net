@@ -39,6 +39,14 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
     public bool IsAwaitingHandover => HandoverTo is not null;
 
+    /// <summary>
+    /// La passation est armee des que le tour a change cote serveur, donc avant
+    /// d'avoir obtenu la vue suivante. Tant que celle-ci n'est pas arrivee, il
+    /// n'y a rien a confirmer : confirmer afficherait la vue perimee du joueur
+    /// precedent — c'est-a-dire SA flotte.
+    /// </summary>
+    public bool IsHandoverReady => HandoverTo is not null && View?.ViewerName == HandoverTo;
+
     public bool CanFire => View is not null && !IsOver && !IsPlacingFleet && !IsAwaitingHandover && View.IsViewerTurn && !IsBusy;
 
     public bool CanRetryBotTurn => View is not null && !IsOver && !IsPlacingFleet && !IsHotSeat && !View.IsViewerTurn && !IsBusy;
@@ -88,8 +96,10 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
         // En hot-seat, la vue bascule sur l'autre joueur des le tir resolu : le
         // nom du tireur doit etre retenu avant, sinon le message s'adresse au
-        // mauvais joueur.
+        // mauvais joueur. Celui du suivant aussi, pour armer la passation sans
+        // dependre du rafraichissement.
         var shooter = IsHotSeat ? View.ViewerName : "Vous";
+        var nextPlayer = IsHotSeat ? View.OpponentName : null;
 
         await RunAsync(async () =>
         {
@@ -110,10 +120,16 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
                     return;
                 }
 
-                if (IsHotSeat)
+                if (nextPlayer is not null)
                 {
+                    // Arme AVANT le rafraichissement : le tour a deja change cote
+                    // serveur. Si le GET echoue, l'interface reste sur l'ecran de
+                    // passation au lieu de rendre la vue perimee du tireur — qui
+                    // le laisserait rejouer, et le serveur accepterait ce tir
+                    // comme celui de l'adversaire. La passation est le seul garde
+                    // du tour en hot-seat.
+                    HandoverTo = nextPlayer;
                     await RefreshAsync(gameId);
-                    RequestHandover();
                     return;
                 }
             }
@@ -162,6 +178,7 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
         }
 
         var gameId = View.GameId;
+        var nextPlayer = IsHotSeat ? View.OpponentName : null;
 
         await RunAsync(async () =>
         {
@@ -173,14 +190,19 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
                 return;
             }
 
+            // Meme raison qu'au tir : la flotte est posee cote serveur, la
+            // passation ne doit pas dependre de la lecture de la reponse.
+            HandoverTo = nextPlayer;
+
             View = await response.Content.ReadFromJsonAsync<GameViewResponse>();
 
             if (IsPlacingFleet)
             {
                 Notice = "Flotte enregistrée.";
-                RequestHandover();
                 return;
             }
+
+            HandoverTo = null;
 
             Notice = "Flotte en place. À vous de jouer.";
         });
@@ -189,8 +211,26 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
     /// <summary>L'appareil a change de mains : la vue peut etre affichee.</summary>
     public void ConfirmHandover()
     {
+        if (!IsHandoverReady)
+        {
+            return;
+        }
+
         HandoverTo = null;
         OnChange?.Invoke();
+    }
+
+    /// <summary>Rejoue le rafraichissement quand il a echoue pendant la passation.</summary>
+    public async Task RetryHandoverAsync()
+    {
+        if (View is null || HandoverTo is null)
+        {
+            return;
+        }
+
+        var gameId = View.GameId;
+
+        await RunAsync(() => RefreshAsync(gameId));
     }
 
     /// <summary>Revient a l'ecran de creation sans toucher a la partie cote serveur.</summary>
@@ -203,7 +243,6 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
         OnChange?.Invoke();
     }
 
-    private void RequestHandover() => HandoverTo = View?.ViewerName;
 
     private async Task PlayBotTurnAsync(Guid gameId)
     {

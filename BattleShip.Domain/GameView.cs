@@ -23,6 +23,7 @@ public sealed record GameView(
     GameMode Mode,
     BoardSize Size,
     string ViewerName,
+    string OpponentName,
     bool IsViewerTurn,
     IReadOnlyList<ShipView> OwnFleet,
     IReadOnlyCollection<Coordinates> ShotsReceived,
