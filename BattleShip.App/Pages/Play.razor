@@ -39,10 +39,101 @@
         </select>
         <p class="form-text mb-3">@BotDifficultyCatalog.SummaryOf(_botDifficulty)</p>
 
+        <label class="form-label" for="placement">Placement de votre flotte</label>
+        <select id="placement" class="form-select mb-3" @bind="_fleetPlacement">
+            <option value="Random">Aléatoire — le serveur pose la flotte</option>
+            <option value="Manual">Manuel — vous posez chaque navire</option>
+        </select>
+
         <button class="btn btn-primary" @onclick="StartAsync" disabled="@Session.IsBusy">
             @(Session.IsBusy ? "Création…" : "Lancer la partie")
         </button>
     </div>
+}
+else if (Session.IsPlacingFleet)
+{
+    <div class="status alert alert-secondary" role="status">
+        <strong>Posez votre flotte.</strong>
+        <span> @_placed.Count / @Session.View.FleetToPlace.Count navires placés.</span>
+        @if (Session.Notice is not null)
+        {
+            <span> @Session.Notice</span>
+        }
+    </div>
+
+    <div class="boards">
+        <section>
+            <h2 class="h6">Votre grille</h2>
+            <div class="grid" style="--columns: @Session.View.Columns">
+                @for (var row = 0; row < Session.View.Rows; row++)
+                {
+                    for (var column = 0; column < Session.View.Columns; column++)
+                    {
+                        // `column` et `row` sont les variables de la boucle for : les
+                        // capturer dans le lambda les ferait toutes valoir leur valeur
+                        // finale. La copie locale est ce qui lie chaque bouton a sa case.
+                        var cell = new CoordinatesDto(column, row);
+
+                        <button type="button"
+                                class="cell @(_takenCells.Contains(cell) ? "cell-ship" : "cell-empty")"
+                                disabled="@(Session.IsBusy || NextShip is null)"
+                                title="@Label(cell)"
+                                @onclick="() => PlaceAt(cell)">
+                        </button>
+                    }
+                }
+            </div>
+        </section>
+
+        <section>
+            <h2 class="h6">Flotte à poser</h2>
+
+            @if (NextShip is { } next)
+            {
+                <p>Navire courant : <strong>@next.Kind</strong> — @next.Size cases.</p>
+
+                <div class="btn-group mb-3" role="group">
+                    <button type="button"
+                            class="btn btn-sm @(_orientation == "Horizontal" ? "btn-primary" : "btn-outline-primary")"
+                            @onclick='() => _orientation = "Horizontal"'>Horizontal</button>
+                    <button type="button"
+                            class="btn btn-sm @(_orientation == "Vertical" ? "btn-primary" : "btn-outline-primary")"
+                            @onclick='() => _orientation = "Vertical"'>Vertical</button>
+                </div>
+
+                <p class="form-text">Cliquez la case de départ : elle sera l'extrémité haute ou gauche du navire.</p>
+            }
+            else
+            {
+                <p>Tous les navires sont posés.</p>
+            }
+
+            <ul class="fleet">
+                @foreach (var ship in Session.View.FleetToPlace.Select((ship, index) => (ship, index)))
+                {
+                    <li class="@(ship.index < _placed.Count ? "sunk" : null)">
+                        @ship.ship.Kind — @ship.ship.Size cases
+                    </li>
+                }
+            </ul>
+
+            <div class="mt-3">
+                <button class="btn btn-primary"
+                        disabled="@(NextShip is not null || Session.IsBusy)"
+                        @onclick="ConfirmFleetAsync">
+                    @(Session.IsBusy ? "Envoi…" : "Valider la flotte")
+                </button>
+                <button class="btn btn-outline-secondary ms-2" disabled="@(_placed.Count is 0)" @onclick="UndoLastShip">
+                    Retirer le dernier
+                </button>
+                <button class="btn btn-outline-secondary ms-2" disabled="@(_placed.Count is 0)" @onclick="ClearFleet">
+                    Tout effacer
+                </button>
+            </div>
+        </section>
+    </div>
+
+    <button class="btn btn-outline-secondary mt-3" @onclick="Reset">Abandonner cette partie</button>
 }
 else
 {
@@ -115,6 +206,66 @@ else
     private string _playerName = "Joueur";
     private int _side = 10;
     private string _botDifficulty = BotDifficultyCatalog.All[0].Name;
+    private string _fleetPlacement = "Random";
+    private string _orientation = "Horizontal";
+    private readonly List<ShipPlacementDto> _placed = [];
+    private HashSet<CoordinatesDto> _takenCells = [];
+
+    private ShipToPlaceDto? NextShip =>
+        Session.View is { } view && _placed.Count < view.FleetToPlace.Count
+            ? view.FleetToPlace[_placed.Count]
+            : null;
+
+    /// <summary>
+    /// Refuse localement ce que le serveur refuserait, pour éviter un
+    /// aller-retour par navire. Le serveur revalide la flotte entière : ce
+    /// contrôle est un confort d'interface, pas la garantie.
+    /// </summary>
+    private void PlaceAt(CoordinatesDto origin)
+    {
+        if (Session.View is not { } view || NextShip is not { } ship)
+        {
+            return;
+        }
+
+        var cells = CellsOf(origin.Column, origin.Row, ship.Size, _orientation);
+
+        if (cells.Any(cell => cell.Column >= view.Columns || cell.Row >= view.Rows) ||
+            cells.Any(_takenCells.Contains))
+        {
+            return;
+        }
+
+        _placed.Add(new ShipPlacementDto(ship.Kind, origin.Column, origin.Row, _orientation));
+        RecomputeTakenCells();
+    }
+
+    private static List<CoordinatesDto> CellsOf(int column, int row, int size, string orientation) =>
+        [.. Enumerable.Range(0, size).Select(offset => orientation == "Horizontal"
+            ? new CoordinatesDto(column + offset, row)
+            : new CoordinatesDto(column, row + offset))];
+
+    private void RecomputeTakenCells() =>
+        _takenCells = [.. _placed.SelectMany(ship => CellsOf(
+            ship.Column,
+            ship.Row,
+            Session.View!.FleetToPlace.First(candidate => candidate.Kind == ship.Kind).Size,
+            ship.Orientation))];
+
+    private void UndoLastShip()
+    {
+        _placed.RemoveAt(_placed.Count - 1);
+        RecomputeTakenCells();
+    }
+
+    private void ClearFleet()
+    {
+        _placed.Clear();
+        RecomputeTakenCells();
+    }
+
+    private async Task ConfirmFleetAsync() => await Session.PlaceFleetAsync(_placed);
+
 
     private Dictionary<CoordinatesDto, string> _fired = [];
     private HashSet<CoordinatesDto> _ownShipCells = [];
@@ -153,7 +304,11 @@ else
         _incoming = [.. view.ShotsReceived];
     }
 
-    private async Task StartAsync() => await Session.StartAsync(_playerName, _side, _botDifficulty);
+    private async Task StartAsync()
+    {
+        ClearFleet();
+        await Session.StartAsync(_playerName, _side, _botDifficulty, _fleetPlacement);
+    }
 
     private async Task FireAsync(CoordinatesDto target) => await Session.FireAsync(target.Column, target.Row);
 
@@ -162,6 +317,7 @@ else
     private void Reset()
     {
         Session.Forget();
+        ClearFleet();
         Project();
     }
 

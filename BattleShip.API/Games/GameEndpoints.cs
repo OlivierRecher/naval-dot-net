@@ -24,6 +24,10 @@ public static class GameEndpoints
         games.MapPost("/{id:guid}/bot-turn", PlayBotTurn)
             .WithName("PlayBotTurn");
 
+        games.MapPut("/{id:guid}/fleet", PlaceFleet)
+            .WithName("PlaceFleet")
+            .WithValidation<PlaceFleetRequest>();
+
         return routes;
     }
 
@@ -33,12 +37,17 @@ public static class GameEndpoints
         RandomFleetPlacer placer)
     {
         var size = new BoardSize(request.Columns, request.Rows);
+        var placement = EnumNames<FleetPlacement>.Parse(request.FleetPlacement);
 
         try
         {
-            var human = new Player(request.PlayerName, isBot: false, placer.Place(size, FleetTemplate.Standard));
+            var humanBoard = placement is FleetPlacement.Manual
+                ? new Board(size)
+                : placer.Place(size, FleetTemplate.Standard);
+
+            var human = new Player(request.PlayerName, isBot: false, humanBoard);
             var bot = new Player("Bot", isBot: true, placer.Place(size, FleetTemplate.Standard));
-            var game = new Game(GameMode.Solo, human, bot, BotDifficulties.Parse(request.BotDifficulty));
+            var game = new Game(GameMode.Solo, human, bot, EnumNames<BotDifficulty>.Parse(request.BotDifficulty));
 
             repository.Add(game);
 
@@ -83,8 +92,51 @@ public static class GameEndpoints
             : TypedResults.Ok(outcome.ToResponse(game));
     }
 
+    private static IResult PlaceFleet(Guid id, PlaceFleetRequest request, IGameRepository repository)
+    {
+        if (repository.Find(id) is not { } game)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var outcome = game.PlaceFleetFromClient(
+            [.. request.Ships.Select(ship => new ShipPlacement(
+                EnumNames<ShipKind>.Parse(ship.Kind),
+                new Coordinates(ship.Column, ship.Row),
+                EnumNames<Orientation>.Parse(ship.Orientation)))]);
+
+        return outcome.Rejection is { } rejection
+            ? Refused(rejection)
+            : TypedResults.Ok(game.ViewForClient().ToResponse());
+    }
+
+    private static IResult Refused(FleetRejection rejection) => rejection switch
+    {
+        FleetRejection.WrongComposition => TypedResults.Problem(
+            "La flotte doit compter exactement un navire de chaque type.",
+            statusCode: StatusCodes.Status400BadRequest),
+
+        FleetRejection.OutOfBounds => TypedResults.Problem(
+            "Un navire dépasse de la grille.",
+            statusCode: StatusCodes.Status400BadRequest),
+
+        FleetRejection.Overlap => TypedResults.Problem(
+            "Deux navires se chevauchent.",
+            statusCode: StatusCodes.Status400BadRequest),
+
+        FleetRejection.FleetAlreadyPlaced => TypedResults.Problem(
+            "La flotte est déjà posée.",
+            statusCode: StatusCodes.Status409Conflict),
+
+        _ => TypedResults.Problem(statusCode: StatusCodes.Status500InternalServerError)
+    };
+
     private static IResult Refused(FireRejection rejection) => rejection switch
     {
+        FireRejection.FleetNotPlaced => TypedResults.Problem(
+            "La flotte n'est pas encore posée.",
+            statusCode: StatusCodes.Status409Conflict),
+
         FireRejection.OutsideBoard => TypedResults.Problem(
             "La case visée est en dehors de la grille.",
             statusCode: StatusCodes.Status400BadRequest),

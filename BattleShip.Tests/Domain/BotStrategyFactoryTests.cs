@@ -18,7 +18,7 @@ public class BotStrategyFactoryTests
         Assert.Throws<ArgumentOutOfRangeException>(() => _factory.For((BotDifficulty)42));
 }
 
-public class BotDifficultiesTests
+public class EnumNamesTests
 {
     [Theory]
     [InlineData("Random", BotDifficulty.Random)]
@@ -27,7 +27,7 @@ public class BotDifficultiesTests
     [InlineData("huntTargetParity", BotDifficulty.HuntTargetParity)]
     public void TryParse_OnAKnownName_Succeeds(string name, BotDifficulty expected)
     {
-        Assert.True(BotDifficulties.TryParse(name, out var difficulty));
+        Assert.True(EnumNames<BotDifficulty>.TryParse(name, out var difficulty));
         Assert.Equal(expected, difficulty);
     }
 
@@ -44,9 +44,9 @@ public class BotDifficultiesTests
     [InlineData(null)]
     [InlineData("Expert")]
     public void TryParse_OnAnythingButAName_Fails(string? candidate) =>
-        Assert.False(BotDifficulties.TryParse(candidate, out _));
+        Assert.False(EnumNames<BotDifficulty>.TryParse(candidate, out _));
 
     [Fact]
     public void Names_ListsEveryDifficulty() =>
-        Assert.Equal(Enum.GetValues<BotDifficulty>().Length, BotDifficulties.Names.Count);
+        Assert.Equal(Enum.GetValues<BotDifficulty>().Length, EnumNames<BotDifficulty>.All.Count);
 }

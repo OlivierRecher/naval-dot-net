@@ -34,7 +34,7 @@ public class BotDifficultyEndpointsTests(WebApplicationFactory<Program> factory)
     {
         var client = factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, difficulty));
+        var response = await client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, difficulty, "Random"));
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
@@ -58,7 +58,7 @@ public class BotDifficultyEndpointsTests(WebApplicationFactory<Program> factory)
             .CreateClient();
 
         var created = await client.PostAsJsonAsync(
-            "/games", new CreateGameRequest("Olivier", 10, 10, "HuntTargetParity"));
+            "/games", new CreateGameRequest("Olivier", 10, 10, "HuntTargetParity", "Random"));
         var view = await created.Content.ReadFromJsonAsync<GameViewResponse>();
 
         await client.PostAsJsonAsync($"/games/{view!.GameId}/shots", new FireRequest(0, 0));
@@ -73,7 +73,7 @@ public class BotDifficultyEndpointsTests(WebApplicationFactory<Program> factory)
     {
         var client = factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, "Expert"));
+        var response = await client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, "Expert", "Random"));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("HuntTargetParity", await response.Content.ReadAsStringAsync());
@@ -115,7 +115,7 @@ public class BotDifficultyEndpointsTests(WebApplicationFactory<Program> factory)
         var client = factory.CreateClient();
 
         var response = await client.PostAsJsonAsync(
-            "/games", new CreateGameRequest("Olivier", 10, 10, "hunttargetparity"));
+            "/games", new CreateGameRequest("Olivier", 10, 10, "hunttargetparity", "Random"));
         var view = await response.Content.ReadFromJsonAsync<GameViewResponse>();
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -130,6 +130,6 @@ public class BotDifficultyEndpointsTests(WebApplicationFactory<Program> factory)
     [Fact]
     public void TheSharedCatalog_NamesEveryDifficultyOfTheDomain_AndNothingElse() =>
         Assert.Equal(
-            BotDifficulties.Names.Order(),
+            EnumNames<BotDifficulty>.All.Order(),
             BotDifficultyCatalog.All.Select(option => option.Name).Order());
 }

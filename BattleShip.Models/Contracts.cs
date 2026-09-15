@@ -5,9 +5,25 @@ namespace BattleShip.Models;
 /// doit produire un 400 de FluentValidation, pas une erreur de désérialisation
 /// avant que le filtre de validation ait pu s'exécuter. Voir ADR 0009.
 /// </summary>
-public sealed record CreateGameRequest(string PlayerName, int Columns, int Rows, string BotDifficulty);
+public sealed record CreateGameRequest(
+    string PlayerName,
+    int Columns,
+    int Rows,
+    string BotDifficulty,
+    string FleetPlacement);
 
 public sealed record FireRequest(int Column, int Row);
+
+public sealed record ShipPlacementDto(string Kind, int Column, int Row, string Orientation);
+
+public sealed record PlaceFleetRequest(IReadOnlyList<ShipPlacementDto> Ships);
+
+/// <summary>
+/// Un navire que le joueur doit encore poser. Le serveur dicte la composition :
+/// le front n'a aucune règle de jeu à connaître, et la flotte personnalisable
+/// (item 6) ne demandera aucun changement côté client.
+/// </summary>
+public sealed record ShipToPlaceDto(string Kind, int Size);
 
 public sealed record CoordinatesDto(int Column, int Row);
 
@@ -35,6 +51,7 @@ public sealed record GameViewResponse(
     IReadOnlyList<CoordinatesDto> ShotsReceived,
     IReadOnlyList<RevealedCellDto> ShotsFired,
     string BotDifficulty,
+    IReadOnlyList<ShipToPlaceDto> FleetToPlace,
     string? Winner);
 
 public sealed record ShotOutcomeResponse(

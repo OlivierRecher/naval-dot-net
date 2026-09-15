@@ -10,7 +10,7 @@ namespace BattleShip.Tests.Domain;
 internal static class BotDrill
 {
     public static GameView ViewOf(BoardSize size, IReadOnlyList<RevealedCell> fired) =>
-        new(Guid.Empty, GameStatus.InProgress, GameMode.Solo, size, "Bot", true, [], [], fired, BotDifficulty.Random, null);
+        new(Guid.Empty, GameStatus.InProgress, GameMode.Solo, size, "Bot", true, [], [], fired, BotDifficulty.Random, [], null);
 
     public static int ShotsToClear(IBotStrategy strategy, Board target, BoardSize size)
     {

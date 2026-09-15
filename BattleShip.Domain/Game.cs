@@ -8,6 +8,7 @@ public enum GameMode
 
 public enum GameStatus
 {
+    AwaitingFleet,
     InProgress,
     Finished
 }
@@ -31,6 +32,12 @@ public sealed class Game
         BotDifficulty = botDifficulty;
         _current = first;
         _waiting = second;
+
+        // Le statut se deduit des grilles plutot que d'un drapeau : un drapeau
+        // pourrait contredire l'etat reel des flottes.
+        Status = first.Board.Ships.Count is 0 || second.Board.Ships.Count is 0
+            ? GameStatus.AwaitingFleet
+            : GameStatus.InProgress;
     }
 
     public Guid Id { get; } = Guid.NewGuid();
@@ -39,7 +46,7 @@ public sealed class Game
 
     public BotDifficulty BotDifficulty { get; }
 
-    public GameStatus Status { get; private set; } = GameStatus.InProgress;
+    public GameStatus Status { get; private set; }
 
     public Player CurrentPlayer => _current;
 
@@ -94,6 +101,13 @@ public sealed class Game
     {
         lock (_gate)
         {
+            // Ce garde n'est pas redondant avec FireRules : sans lui, le refus
+            // deviendrait NotTheBotTurn, qui decrit mal la situation.
+            if (Status is GameStatus.AwaitingFleet)
+            {
+                return FireOutcome.Rejected(FireRejection.FleetNotPlaced);
+            }
+
             if (Status is GameStatus.Finished)
             {
                 return FireOutcome.Rejected(FireRejection.GameFinished);
@@ -105,6 +119,39 @@ public sealed class Game
             }
 
             return FireLocked(strategy.ChooseTarget(ViewLocked(_current), _waiting.Board.Size));
+        }
+    }
+
+    /// <summary>
+    /// Pose la flotte demandee par le navigateur. Le client n'envoie aucune
+    /// identite : le serveur remplit la grille du seul humain qui en attend une,
+    /// donc jamais celle d'un bot. Voir ADR 0003.
+    /// </summary>
+    public FleetOutcome PlaceFleetFromClient(IReadOnlyList<ShipPlacement> placements)
+    {
+        lock (_gate)
+        {
+            if (BoardAwaitingFleet() is not { } board)
+            {
+                return FleetOutcome.Rejected(FleetRejection.FleetAlreadyPlaced);
+            }
+
+            if (FleetPlacementRules.Validate(board.Size, FleetTemplate.Standard, placements) is { } rejection)
+            {
+                return FleetOutcome.Rejected(rejection);
+            }
+
+            foreach (var placement in placements)
+            {
+                board.Place(placement);
+            }
+
+            if (BoardAwaitingFleet() is null)
+            {
+                Status = GameStatus.InProgress;
+            }
+
+            return FleetOutcome.Accepted;
         }
     }
 
@@ -127,6 +174,15 @@ public sealed class Game
             return ViewLocked(viewer);
         }
     }
+
+    /// <summary>
+    /// La grille d'un bot n'est jamais servie au client, meme vide : le serveur
+    /// remplit celle du bot lui-meme. Voir ADR 0003.
+    /// </summary>
+    private Board? BoardAwaitingFleet() =>
+        new[] { _current, _waiting }
+            .FirstOrDefault(player => !player.IsBot && player.Board.Ships.Count is 0)
+            ?.Board;
 
     private FireOutcome FireLocked(Coordinates target)
     {
@@ -165,6 +221,9 @@ public sealed class Game
             [.. _shots.Where(shot => shot.ShooterId == viewer.Id)
                       .Select(shot => new RevealedCell(shot.Target, shot.Result))],
             BotDifficulty,
+            Status is GameStatus.AwaitingFleet && viewer.Board.Ships.Count is 0
+                ? [.. FleetTemplate.Standard.Select(kind => new ShipToPlace(kind, kind.Size()))]
+                : [],
             Winner?.Name);
     }
 }

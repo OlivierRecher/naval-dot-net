@@ -357,3 +357,78 @@ et mute — c'est ainsi qu'il a trouvé une affirmation d'ADR contredite par une
 sonde HTTP. Aucun des deux n'aurait produit les trouvailles de l'autre.
 
 **Commits** : branche `feat/difficultes-de-bot`, PR #4.
+
+---
+
+## 2026-09-15 — Placement manuel de la flotte
+
+**Outil / modèle** : Claude Code (Opus 5)
+
+**Contexte**
+Item 3 du backlog. Le placement manuel introduit une phase qui n'existait pas :
+la partie existe, mais on ne peut pas y tirer. `CONTEXT.md` avait anticipé ce
+troisième statut depuis le cadrage sans décider comment il serait porté.
+
+Le risque identifié était l'**état intermédiaire**. Une flotte se pose en cinq
+navires ; si le serveur accepte les navires un par un, une flotte abandonnée en
+cours de route laisse une grille à moitié remplie, dans un état qu'aucune règle
+du jeu ne décrit et qu'aucun test n'aurait de raison d'instancier.
+
+**Prompt**
+Livrer le placement manuel en TDD sur le domaine, le placement aléatoire restant
+offert. Trancher explicitement deux questions avant de coder : comment la partie
+sait qu'elle attend une flotte, et à quelle granularité la flotte est soumise.
+Pour chaque règle ajoutée, exécuter la mutation qui la casse — et si une mutation
+survit, ne pas ajuster le test après coup mais se demander d'abord si c'est le
+code ou le test qui est de trop.
+
+**Réponse résumée**
+
+| Question | Décision |
+|---|---|
+| Comment la partie sait qu'elle attend | Le statut se **déduit des grilles** : une grille humaine vide *est* l'attente. Pas de drapeau, qui pourrait contredire les grilles |
+| Granularité de la soumission | La **flotte entière** en une requête `PUT`, validée en bloc avant qu'aucune case ne soit posée |
+| Qui dicte la composition | Le serveur : la `GameView` publie `FleetToPlace` — types et longueurs, **aucune position** |
+| Contrat des valeurs nommées | `EnumNames<T>` généralise l'ADR 0009 et sert quatre énumérations ; `BotDifficulties` disparaît |
+
+**Décision** : acceptée. Deux effets non recherchés méritent d'être notés.
+
+1. **Le mode `Local` de l'item 4 est déjà servi.** `BoardAwaitingFleet()` rend la
+   prochaine grille humaine vide ; avec deux humains, chaque `PUT` en remplit
+   une et la partie démarre quand il n'en reste plus. Aucune ligne à ajouter.
+2. **Trois mutations ont survécu au premier passage**, et elles ont changé le
+   code plutôt que les tests. Voir ci-dessous.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 172 tests, 0 échec (134 avant l'item 3) |
+| 9 mutations, chacune rétablie | 6 détectées d'emblée, **3 survivantes** — table complète dans l'ADR 0010 |
+| Survivante 1 — garde `AwaitingFleet` de `FireFromClient` | `FireRules.Validate` refusait déjà : **code mort, supprimé** |
+| Survivante 2 — contrôle de statut dans `PlaceFleetFromClient` | Redondant avec l'absence de grille en attente : **condition simplifiée** |
+| Survivante 3 — garde « jamais la grille d'un bot » | Aucun test ne le distinguait de son absence : **test ajouté** |
+| Mutations rejouées après correction | Les 9 sont détectées |
+| Parcours navigateur | Partie manuelle créée, 5 navires posés, flotte validée, partie jouée jusqu'au tir et à la riposte |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- Le gabarit contrôlé est `FleetTemplate.Standard`, **en dur** dans
+  `Game.PlaceFleetFromClient`. La partie connaît la taille de sa grille mais pas
+  sa flotte ; l'item 6 devra la lui donner.
+- Le contrôle local du navigateur — débordement et chevauchement — n'a **aucun
+  test automatisé**. C'est un confort d'interface ; la garantie est le contrôle
+  serveur, qui lui est testé.
+- Aucun test ne couvre une flotte soumise **pendant** qu'une autre requête la
+  soumet. Le verrou de l'agrégat sérialise les deux, mais rien ne l'atteste ici,
+  contrairement aux tirs concurrents de l'item 1.
+
+**Constat de méthode**
+« Le test passe » et « le test protège » sont deux choses différentes, et la
+seule façon connue de les distinguer est de casser la règle. Sur neuf mutations,
+trois ont révélé du code ou des tests qui ne servaient à rien — soit un tiers.
+Aucun de ces trois défauts n'était visible à la relecture : les deux gardes morts
+paraissaient prudents, et le test tautologique portait le nom exact de
+l'invariant qu'il ne protégeait pas.
+
+**Commits** : branche `feat/placement-manuel`, PR #5.

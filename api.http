@@ -5,7 +5,7 @@
 POST {{api}}/games
 Content-Type: application/json
 
-{ "playerName": "Olivier", "columns": 10, "rows": 10, "botDifficulty": "HuntTargetParity" }
+{ "playerName": "Olivier", "columns": 10, "rows": 10, "botDifficulty": "HuntTargetParity", "fleetPlacement": "Random" }
 
 ### Lire l'état courant (toujours la vue du joueur humain)
 GET {{api}}/games/{{create.response.body.gameId}}
@@ -26,7 +26,7 @@ Content-Type: application/json
 POST {{api}}/games
 Content-Type: application/json
 
-{ "playerName": "", "columns": 10, "rows": 10, "botDifficulty": "HuntTarget" }
+{ "playerName": "", "columns": 10, "rows": 10, "botDifficulty": "HuntTarget", "fleetPlacement": "Random" }
 
 ### Case déjà visée : 409, le tour n'est pas consommé
 POST {{api}}/games/{{create.response.body.gameId}}/shots
@@ -38,4 +38,47 @@ Content-Type: application/json
 POST {{api}}/games
 Content-Type: application/json
 
-{ "playerName": "Olivier", "columns": 10, "rows": 10, "botDifficulty": "Expert" }
+{ "playerName": "Olivier", "columns": 10, "rows": 10, "botDifficulty": "Expert", "fleetPlacement": "Random" }
+
+### Créer une partie à placement manuel : 201, statut AwaitingFleet
+# @name manual
+POST {{api}}/games
+Content-Type: application/json
+
+{ "playerName": "Olivier", "columns": 10, "rows": 10, "botDifficulty": "HuntTarget", "fleetPlacement": "Manual" }
+
+### Poser la flotte : 200, la partie démarre
+PUT {{api}}/games/{{manual.response.body.gameId}}/fleet
+Content-Type: application/json
+
+{ "ships": [
+  { "kind": "Carrier",    "column": 0, "row": 0, "orientation": "Vertical" },
+  { "kind": "Battleship", "column": 2, "row": 0, "orientation": "Vertical" },
+  { "kind": "Cruiser",    "column": 4, "row": 0, "orientation": "Vertical" },
+  { "kind": "Submarine",  "column": 6, "row": 0, "orientation": "Vertical" },
+  { "kind": "Destroyer",  "column": 8, "row": 0, "orientation": "Vertical" }
+] }
+
+### Reposer la flotte : 409, elle est déjà posée
+PUT {{api}}/games/{{manual.response.body.gameId}}/fleet
+Content-Type: application/json
+
+{ "ships": [
+  { "kind": "Carrier",    "column": 0, "row": 0, "orientation": "Vertical" },
+  { "kind": "Battleship", "column": 2, "row": 0, "orientation": "Vertical" },
+  { "kind": "Cruiser",    "column": 4, "row": 0, "orientation": "Vertical" },
+  { "kind": "Submarine",  "column": 6, "row": 0, "orientation": "Vertical" },
+  { "kind": "Destroyer",  "column": 8, "row": 0, "orientation": "Vertical" }
+] }
+
+### Flotte incomplète : 400 produit par le domaine
+PUT {{api}}/games/{{manual.response.body.gameId}}/fleet
+Content-Type: application/json
+
+{ "ships": [ { "kind": "Carrier", "column": 0, "row": 0, "orientation": "Vertical" } ] }
+
+### Type de navire inconnu : 400 produit par le filtre de validation
+PUT {{api}}/games/{{manual.response.body.gameId}}/fleet
+Content-Type: application/json
+
+{ "ships": [ { "kind": "Frigate", "column": 0, "row": 0, "orientation": "Vertical" } ] }

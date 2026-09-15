@@ -24,15 +24,17 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
     public bool IsOver => View?.Status == nameof(GameStatusNames.Finished);
 
-    public bool CanFire => View is not null && !IsOver && View.IsViewerTurn && !IsBusy;
+    public bool IsPlacingFleet => View?.Status == nameof(GameStatusNames.AwaitingFleet);
 
-    public bool CanRetryBotTurn => View is not null && !IsOver && !View.IsViewerTurn && !IsBusy;
+    public bool CanFire => View is not null && !IsOver && !IsPlacingFleet && View.IsViewerTurn && !IsBusy;
 
-    public async Task StartAsync(string playerName, int side, string botDifficulty)
+    public bool CanRetryBotTurn => View is not null && !IsOver && !IsPlacingFleet && !View.IsViewerTurn && !IsBusy;
+
+    public async Task StartAsync(string playerName, int side, string botDifficulty, string fleetPlacement)
     {
         await RunAsync(async () =>
         {
-            var response = await http.PostAsJsonAsync("games", new CreateGameRequest(playerName, side, side, botDifficulty));
+            var response = await http.PostAsJsonAsync("games", new CreateGameRequest(playerName, side, side, botDifficulty, fleetPlacement));
 
             if (!response.IsSuccessStatusCode)
             {
@@ -41,7 +43,10 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
             }
 
             View = await response.Content.ReadFromJsonAsync<GameViewResponse>();
-            Notice = $"Partie créée contre le bot {BotDifficultyCatalog.LabelOf(View?.BotDifficulty)}. À vous de jouer.";
+
+            Notice = IsPlacingFleet
+                ? $"Partie créée contre le bot {BotDifficultyCatalog.LabelOf(View?.BotDifficulty)}. Posez votre flotte."
+                : $"Partie créée contre le bot {BotDifficultyCatalog.LabelOf(View?.BotDifficulty)}. À vous de jouer.";
         });
     }
 
@@ -106,6 +111,35 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
         {
             await PlayBotTurnAsync(gameId);
             await RefreshAsync(gameId);
+        });
+    }
+
+    /// <summary>
+    /// Pose la flotte. Le navigateur verifie deja le debordement et le
+    /// chevauchement pour eviter un aller-retour par navire, mais c'est le
+    /// serveur qui refuse : le controle local est un confort, pas la garantie.
+    /// </summary>
+    public async Task PlaceFleetAsync(IReadOnlyList<ShipPlacementDto> ships)
+    {
+        if (View is null)
+        {
+            return;
+        }
+
+        var gameId = View.GameId;
+
+        await RunAsync(async () =>
+        {
+            var response = await http.PutAsJsonAsync($"games/{gameId}/fleet", new PlaceFleetRequest(ships));
+
+            if (!response.IsSuccessStatusCode)
+            {
+                Failure = $"Placement refusé par le serveur (HTTP {(int)response.StatusCode}). Votre flotte n'est pas posée.";
+                return;
+            }
+
+            View = await response.Content.ReadFromJsonAsync<GameViewResponse>();
+            Notice = "Flotte en place. À vous de jouer.";
         });
     }
 
@@ -175,6 +209,7 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
     private enum GameStatusNames
     {
+        AwaitingFleet,
         InProgress,
         Finished
     }
