@@ -904,3 +904,64 @@ protéger et ce qu'il protège réellement**. Un test porte un nom, une
 documentation, une intention — et rien de tout cela n'est exécuté.
 
 **Commits** : branche `feat/personnalisation`, PR #8.
+
+---
+
+## 2026-09-15 — Rendre l'erreur gRPC-Web démontrable depuis l'interface
+
+**Outil / modèle** : Claude Code (Opus 5)
+
+**Contexte**
+Le backlog était terminé. En reprenant la checklist de remise d'`AGENTS.md` § 13,
+une **contrainte imposée** restait ouverte — § 2, « gRPC-Web fonctionnel sur au
+moins un échange, avec une **erreur attendue démontrable** » — et le README
+l'admettait lui-même :
+
+> L'erreur gRPC-Web attendue n'est pas déclenchable depuis l'interface : l'écran
+> désactive les cases déjà visées, donc le `FailedPrecondition` ne se démontre que
+> par les tests d'intégration ou par un appel direct.
+
+Une limite honnêtement écrite, mais une ligne de checklist non cochée. « Ça se
+voit dans les tests » est une réponse faible devant un correcteur qui demande une
+démonstration.
+
+**Prompt**
+Fermer cette contrainte. L'erreur doit être déclenchable depuis le navigateur,
+sans affaiblir la protection qui la rendait inatteignable — les cases déjà visées
+restent désactivées.
+
+**Réponse résumée**
+Un bouton « Démontrer l'erreur gRPC-Web », sous les grilles, rejoue
+volontairement le premier tir du journal. Il **contourne l'interface, pas le
+serveur** : le clic normal reste impossible, et c'est bien le serveur qui refuse.
+
+L'écran affiche le statut et le message reçus, puis relit l'état et vérifie que
+le tour n'a **pas** été consommé — la règle d'`AGENTS.md` § 3 vue depuis le
+transport binaire.
+
+**Décision** : acceptée.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `CI=true dotnet build` puis `dotnet test` | 248 tests, 0 échec, 0 avertissement |
+| Navigateur | « gRPC-Web a refusé le tir en A3 — statut **FailedPrecondition** : « Cette case a déjà été visée ; le tour n'est pas consommé. » Le tour n'a pas été consommé : toujours 1 tir(s) au journal. » |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- La commande n'a **aucun test automatisé**, comme tout le front. Le refus
+  serveur qu'elle déclenche, lui, est couvert par `BattleGrpcServiceTests`.
+- Elle ne démontre qu'une des trois erreurs annoncées par l'ADR 0005.
+  `InvalidArgument` et `NotFound` restent couverts par les tests et `api.http`,
+  sans affordance dans l'interface.
+- Le message affiché vient du serveur. Si celui-ci changeait de formulation,
+  l'écran le refléterait sans que rien ne le signale.
+
+**Constat de méthode**
+Cette contrainte n'a pas été trouvée en relisant le code mais en relisant la
+**checklist de remise**, une fois le backlog fini. Une limite écrite dans le
+README avait tenu lieu de solution : elle décrivait honnêtement un manque, et
+cette honnêteté avait suffi à le rendre confortable.
+
+**Commits** : branche `feat/demonstration-grpc`, PR #9.

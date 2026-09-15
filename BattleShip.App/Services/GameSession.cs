@@ -26,6 +26,13 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
     public StatisticsResponse? Statistics { get; private set; }
 
+    /// <summary>
+    /// Ce que le serveur a repondu au dernier tir volontairement invalide. Sert
+    /// la contrainte imposee par AGENTS.md § 2 : l'erreur gRPC-Web attendue doit
+    /// etre demontrable, et non seulement testee.
+    /// </summary>
+    public string? GrpcRefusal { get; private set; }
+
     public bool IsOver => View?.Status == nameof(GameStatusNames.Finished);
 
     public bool IsPlacingFleet => View?.Status == nameof(GameStatusNames.AwaitingFleet);
@@ -66,6 +73,9 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
     {
         await RunAsync(async () =>
         {
+            // Le refus demontre appartient a la partie ou il a ete obtenu.
+            GrpcRefusal = null;
+
             var response = await http.PostAsJsonAsync("games", new CreateGameRequest(playerName, side, side, mode, botDifficulty, fleetPlacement, opponentName, fleet));
 
             if (!response.IsSuccessStatusCode)
@@ -214,6 +224,63 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
     }
 
     /// <summary>
+    /// Rejoue volontairement un tir sur une case deja visee. Le serveur doit
+    /// repondre FailedPrecondition, et surtout ne pas consommer le tour : c'est
+    /// la regle d'AGENTS.md § 3 vue depuis le transport binaire.
+    ///
+    /// L'interface interdit normalement ce clic — les cases connues sont
+    /// desactivees. Cette commande contourne l'interface, pas le serveur.
+    /// </summary>
+    public async Task DemonstrateGrpcRefusalAsync()
+    {
+        if (View is null || View.ShotsFired.Count is 0)
+        {
+            return;
+        }
+
+        var gameId = View.GameId;
+        var alreadyFired = View.ShotsFired[0].Target;
+        var shotsBefore = View.ShotsFired.Count;
+
+        await RunAsync(async () =>
+        {
+            GrpcRefusal = null;
+
+            try
+            {
+                await battle.FireAsync(new FireCommand
+                {
+                    GameId = gameId.ToString(),
+                    Column = alreadyFired.Column,
+                    Row = alreadyFired.Row
+                });
+
+                GrpcRefusal = "Le serveur a accepté ce tir — c'est une anomalie : la case avait déjà été visée.";
+            }
+            // Seul le refus attendu est interprete. Une panne de transport —
+            // Unavailable, par exemple — doit remonter a RunAsync, qui la
+            // presente comme un echec reseau et laisse reessayer ; la traiter
+            // ici la deguiserait en demonstration reussie.
+            catch (RpcException error) when (error.StatusCode is StatusCode.FailedPrecondition)
+            {
+                GrpcRefusal =
+                    $"gRPC-Web a refusé le tir en {(char)('A' + alreadyFired.Column)}{alreadyFired.Row + 1} — " +
+                    $"statut {error.StatusCode} : « {error.Status.Detail} »";
+            }
+
+            await RefreshAsync(gameId);
+
+            if (View?.ShotsFired.Count != shotsBefore)
+            {
+                GrpcRefusal += " ⚠ Le tour a été consommé, ce qui contredit la règle.";
+                return;
+            }
+
+            GrpcRefusal += $" Le tour n'a pas été consommé : toujours {shotsBefore} tir(s) au journal.";
+        });
+    }
+
+    /// <summary>
     /// L'historique passe par ce service comme le reste : AGENTS.md § 6 veut un
     /// seul chemin reseau, donc un seul endroit ou vivent « chargement, succes,
     /// echec ». Une page qui appellerait HttpClient elle-meme en creerait un
@@ -260,6 +327,7 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
         Notice = null;
         Failure = null;
         HandoverTo = null;
+        GrpcRefusal = null;
         OnChange?.Invoke();
     }
 
