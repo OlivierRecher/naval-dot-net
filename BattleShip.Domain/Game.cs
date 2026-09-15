@@ -17,6 +17,13 @@ public sealed class Game
 {
     private readonly Lock _gate = new();
     private readonly List<Shot> _shots = [];
+
+    // L'ordre d'ouverture ne change jamais, contrairement a _current/_waiting qui
+    // s'echangent a chaque tour. La persistance en depend : c'est lui qui dit
+    // quel joueur rejouer en premier. Voir ADR 0012.
+    private readonly Player _first;
+    private readonly Player _second;
+
     private Player _current;
     private Player _waiting;
 
@@ -30,6 +37,8 @@ public sealed class Game
     {
         Mode = mode;
         BotDifficulty = botDifficulty;
+        _first = first;
+        _second = second;
         _current = first;
         _waiting = second;
 
@@ -40,7 +49,7 @@ public sealed class Game
             : GameStatus.InProgress;
     }
 
-    public Guid Id { get; } = Guid.NewGuid();
+    public Guid Id { get; private init; } = Guid.NewGuid();
 
     public GameMode Mode { get; }
 
@@ -63,6 +72,35 @@ public sealed class Game
                 return [.. _shots];
             }
         }
+    }
+
+    /// <summary>
+    /// Reconstruit une partie a partir de ce qui a ete persiste : les placements,
+    /// deja poses sur les grilles recues, et le journal ordonne. Tout le reste —
+    /// cases touchees, navires coules, tour courant, statut, vainqueur — est
+    /// rejoue, jamais stocke. C'est ce que l'ADR 0002 annonçait ; l'ADR 0012 en
+    /// fait la strategie de persistance.
+    /// </summary>
+    public static Game Restore(
+        Guid id,
+        GameMode mode,
+        Player first,
+        Player second,
+        BotDifficulty botDifficulty,
+        IReadOnlyList<Coordinates> shots)
+    {
+        var game = new Game(mode, first, second, botDifficulty) { Id = id };
+
+        foreach (var target in shots)
+        {
+            if (!game.Fire(target).IsAccepted)
+            {
+                throw new InvalidOperationException(
+                    $"Journal incoherent : le tir en {target} est refuse au rejeu de la partie {id}.");
+            }
+        }
+
+        return game;
     }
 
     public FireOutcome Fire(Coordinates target)
@@ -177,6 +215,35 @@ public sealed class Game
             return ViewLocked(_current.IsBot ? _waiting : _current);
         }
     }
+
+    /// <summary>
+    /// Une photographie coherente de la partie, prise sous le verrou. Sans elle,
+    /// un lecteur externe lirait <c>Status</c>, les joueurs et les grilles a des
+    /// instants differents : l'echange de tour est une affectation de tuple, donc
+    /// non atomique, et <c>Board.Ships</c> est une liste vivante. Voir ADR 0012.
+    /// </summary>
+    public GameState Snapshot()
+    {
+        lock (_gate)
+        {
+            return new GameState(
+                Id,
+                Mode,
+                BotDifficulty,
+                Status,
+                _first.Board.Size,
+                Winner?.Name,
+                StateOf(_first),
+                StateOf(_second),
+                [.. _shots]);
+        }
+    }
+
+    private static PlayerState StateOf(Player player) => new(
+        player.Id,
+        player.Name,
+        player.IsBot,
+        [.. player.Board.Ships.Select(ship => ship.Placement)]);
 
     public GameView ViewFor(Player viewer)
     {

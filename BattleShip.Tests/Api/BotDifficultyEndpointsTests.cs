@@ -9,8 +9,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace BattleShip.Tests.Api;
 
-public class BotDifficultyEndpointsTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+public class BotDifficultyEndpointsTests(ApiFactory factory)
+    : IClassFixture<ApiFactory>
 {
     private sealed class RecordingStrategyFactory : IBotStrategyFactory
     {

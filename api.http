@@ -113,3 +113,9 @@ POST {{api}}/games
 Content-Type: application/json
 
 { "playerName": "Olivier", "columns": 10, "rows": 10, "mode": "Online", "botDifficulty": "Random", "fleetPlacement": "Random" }
+
+### Historique des parties
+GET {{api}}/games?limit=20
+
+### Statistiques globales
+GET {{api}}/stats

@@ -33,4 +33,24 @@ internal static class GameMapper
         game.Status is GameStatus.Finished,
         game.Winner?.Name,
         game.ViewForClient().ToResponse());
+
+    public static GameSummaryResponse ToResponse(this GameSummary summary) => new(
+        summary.Id,
+        summary.Mode.ToString(),
+        summary.BotDifficulty.ToString(),
+        summary.Status.ToString(),
+        summary.FirstPlayer,
+        summary.SecondPlayer,
+        summary.WinnerName,
+        summary.Shots,
+        summary.StartedAt,
+        summary.FinishedAt);
+
+    public static StatisticsResponse ToResponse(this Statistics statistics) => new(
+        statistics.Games,
+        statistics.Finished,
+        statistics.Shots,
+        statistics.Hits,
+        statistics.Sunk,
+        statistics.Accuracy);
 }

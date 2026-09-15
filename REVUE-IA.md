@@ -9,7 +9,7 @@ en défaut, ce qui a réellement été observé, et ce qui reste non vérifié.
 
 Binôme : Olivier Recher (@OlivierRecher) · Ulysse (@Oulssyyy)
 
-**État : 7 revues — 2 adaptées, 1 correctif rejeté, 1 conclusion invalidée, 2 défauts invisibles aux tests, 1 test qui ne testait pas.**
+**État : 8 revues — 2 adaptées, 1 correctif rejeté, 1 conclusion invalidée, 2 défauts invisibles aux tests, 2 fois des tests qui ne testaient pas.**
 
 ---
 
@@ -900,3 +900,123 @@ tout le code écrit avant cette décision porte l'ancienne hypothèse sans l'avo
 écrite nulle part. Le défaut n° 3 n'était pas une faute d'inattention : c'était
 une hypothèse devenue fausse, dans du code que personne n'avait de raison de
 relire.
+---
+
+## Revue 8 — Une abstraction posée « pour plus tard » tient-elle le jour où l'on s'en sert ?
+
+**Proposition examinée**
+
+L'ADR 0004, rédigé pendant le socle, introduit `IGameRepository` avant d'en avoir
+le besoin, et justifie ce coût par une promesse chiffrable :
+
+> La bascule vers SQLite consistera à écrire une seconde implémentation et à
+> changer une ligne d'enregistrement. **Aucun endpoint modifié.**
+
+C'est une prédiction, pas une observation : au moment où elle est écrite, aucune
+ligne de persistance n'existe. Le projet a vécu quatre items dessus. L'item 5 est
+le premier à pouvoir la vérifier.
+
+**Hypothèse à vérifier**
+
+> Écrire `SqliteGameRepository` et changer l'enregistrement dans `Program.cs`
+> suffit. Aucun endpoint n'est touché.
+
+**Expérience**
+
+Implémenter la persistance jusqu'à ce qu'une partie survive réellement à un
+redémarrage du serveur, puis **compter les fichiers d'endpoint modifiés**.
+
+Résultat attendu, écrit avant exécution : si la promesse tient, le diff se limite
+à `Program.cs`, à la nouvelle implémentation et au schéma. Tout endpoint touché
+est une réfutation.
+
+Erreur que ce contrôle peut détecter : une abstraction dont la **forme** est
+juste mais dont le **contrat** est incomplet.
+
+**Observation**
+
+La promesse tient sur un point et se rompt sur un autre.
+
+**Ce qui tient** : la forme. `Add` et `Find` étaient les bonnes opérations, et
+`GameRepositorySubstitutionTests`, écrit au socle, passe sans modification sur la
+nouvelle implémentation. Le choix de l'interface était bon.
+
+**Ce qui se rompt** : il manquait un **point de validation**.
+
+Un dépôt en mémoire détient la *référence* de l'agrégat. Quand un endpoint
+appelle `game.Fire(...)`, l'objet du dépôt est le même objet : le dépôt « voit »
+le changement sans qu'on lui dise rien. Un dépôt persistant ne voit rien du tout.
+Il faut lui signaler qu'une partie a changé — et personne ne le faisait, parce
+que personne n'en avait jamais eu besoin.
+
+Le test qui le montre :
+
+```
+AGame_MutatedWithoutSave_LosesItsShotsAcrossARestart
+  game.FireFromClient((3,3));      // aucun Save
+  reloaded = AfterRestart().Find(game.Id);
+  Assert.Single(game.Shots);       // en mémoire, le tir existe
+  Assert.Empty(reloaded.Shots);    // en base, il n'a jamais existé
+```
+
+`IGameRepository` gagne donc `Save(Game)`, et **quatre appelants changent** :
+`POST /shots`, `POST /bot-turn`, `PUT /fleet` et le service gRPC. L'implémentation
+en mémoire en fait une méthode **vide** — et c'est exactement cette vacuité qui a
+masqué le besoin pendant quatre items.
+
+**Décision et justification**
+
+**Décision d'origine conservée, promesse corrigée.**
+
+Abstraire le stockage avant d'en avoir besoin était le bon choix : l'interface
+n'a pas eu à être repensée, seulement complétée, et le test de substitution du
+socle a servi tel quel. Ce qui était faux, c'est la précision de la promesse.
+
+Ce que cet écart enseigne est plus utile que la correction elle-même :
+**l'implémentation de référence d'une abstraction décide de ce qu'on croit être
+son contrat.** Un dépôt en mémoire rend la persistance implicite, donc invisible,
+donc absente de l'interface. Une abstraction écrite contre une seule
+implémentation hérite de ses silences.
+
+Le compteur `Saves` du test de substitution matérialise désormais ce point : il
+compte deux validations pour deux mutations.
+
+**Preuves et limites**
+
+| | |
+|---|---|
+| Promesse examinée | ADR 0004, « aucun endpoint modifié » |
+| Réfutation | 4 appelants modifiés pour ajouter `Save` |
+| Confirmation partielle | `GameRepositorySubstitutionTests`, écrit au socle, passe sans changement |
+| Test qui isole le besoin | `AGame_MutatedWithoutSave_LosesItsShotsAcrossARestart` |
+| Contrôle final | Partie jouée, API redémarrée, partie retrouvée intacte |
+
+Ce qui **reste non vérifié** :
+
+- La promesse a aussi été **sauvée** par un choix discutable : `IGameRepository`
+  reste **synchrone**, donc les entrées/sorties SQLite bloquent un fil du pool.
+  Une interface asynchrone aurait rendu chaque endpoint `async` — et la promesse
+  aurait été réfutée deux fois au lieu d'une. Le coût est réel, il est simplement
+  invisible au périmètre d'un TP.
+- `Save` n'a **ni transaction explicite ni verrou optimiste**. Un second
+  processus écrivant la même partie produirait un conflit de clé, pas une fusion.
+  Le cache et le verrou de l'ADR 0008 ne couvrent qu'un processus ; cet item le
+  confirme au lieu de le corriger.
+- Trois des sept mutations de cet item ont **survécu au premier passage**, et
+  aucune ne révélait un défaut du code : toutes trois révélaient un test qui ne
+  protégeait rien. L'une d'elles — les statistiques ignorant les navires coulés —
+  passait parce que le test recalculait l'attendu **à partir de la réponse**.
+  C'est le défaut de la revue 2, reproduit quatre items plus loin.
+
+**Ce que cette revue enseigne pour la suite du projet**
+
+Une abstraction posée avant son usage ne se juge pas le jour où on l'écrit, mais
+le jour où on s'en sert — et l'écart entre les deux jugements est la seule mesure
+qui compte. Ici il est faible : une méthode manquante sur une interface de deux.
+C'est un bon résultat, et il ne se serait pas vu sans la promesse écrite noir sur
+blanc dans l'ADR 0004.
+
+D'où la règle retenue : **une décision prise « pour plus tard » doit énoncer ce
+qu'elle promet de façon réfutable**, et l'item qui s'en sert doit aller compter.
+Une promesse vague — « ça facilitera la bascule » — aurait été impossible à
+prendre en défaut, donc sans valeur.

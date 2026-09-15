@@ -63,7 +63,10 @@ balayage.
 | Tir | `Shot` | Une tentative **acceptée** : elle est enregistrée au journal et consomme le tour. |
 | Résultat de tir | `ShotResult` | `Miss`, `Hit` ou `Sunk`. |
 | Tentative refusée | — | Une tentative rejetée par les règles (case déjà visée, partie terminée, pas son tour). Elle **ne devient pas un `Shot`** : rien n'est enregistré et le tour ne passe pas. |
-| Journal | `Shots` | La suite ordonnée des tirs d'une partie, en ajout seul. Source de l'historique, du rejeu et des statistiques. |
+| Journal | `Shots` | La suite ordonnée des tirs d'une partie, en ajout seul. Source de l'historique, du rejeu et des statistiques — et, depuis l'item 5, **la seule chose persistée** avec les placements. |
+| Rejeu | `Restore` | La reconstruction d'une partie à partir des placements et du journal. Tout le reste — impacts, navires coulés, tour courant, statut, vainqueur — est recalculé, jamais stocké. |
+| Validation | `Save` | Le moment où le dépôt est informé qu'une partie a changé. Sans objet en mémoire, indispensable dès que le stockage est ailleurs que dans la référence. |
+| Historique | `IGameHistory` | La lecture seule des parties passées : des colonnes, jamais un rejeu. Distincte du dépôt, qui lui reconstruit. |
 
 ## Visibilité
 

@@ -13,8 +13,8 @@ namespace BattleShip.Tests.Api;
 /// une autre implémentation se substitue sans qu'aucun endpoint ne change.
 /// C'est ce test qui distingue une abstraction utile d'une intention.
 /// </summary>
-public class GameRepositorySubstitutionTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+public class GameRepositorySubstitutionTests(ApiFactory factory)
+    : IClassFixture<ApiFactory>
 {
     /// <summary>
     /// Volontairement NON concurrente et distincte de l'implémentation de
@@ -29,6 +29,8 @@ public class GameRepositorySubstitutionTests(WebApplicationFactory<Program> fact
 
         public int Lookups { get; private set; }
 
+        public int Saves { get; private set; }
+
         public void Add(Game game)
         {
             Added++;
@@ -40,6 +42,8 @@ public class GameRepositorySubstitutionTests(WebApplicationFactory<Program> fact
             Lookups++;
             return _games.GetValueOrDefault(id);
         }
+
+        public void Save(Game game) => Saves++;
     }
 
     private (HttpClient Client, RecordingGameRepository Repository) SubstitutedHost()
@@ -75,6 +79,11 @@ public class GameRepositorySubstitutionTests(WebApplicationFactory<Program> fact
         // La partie a bien transité par NOTRE dépôt, pas par celui de production.
         Assert.Equal(1, repository.Added);
         Assert.Equal(3, repository.Lookups);
+
+        // Deux mutations, deux validations. Ce compteur est la trace du point que
+        // l'ADR 0004 n'avait pas prévu : un dépôt en mémoire n'en a pas besoin,
+        // un dépôt persistant ne peut pas s'en passer. Voir REVUE-IA revue 8.
+        Assert.Equal(2, repository.Saves);
     }
 
     [Fact]

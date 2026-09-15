@@ -28,6 +28,13 @@ public static class GameEndpoints
             .WithName("PlaceFleet")
             .WithValidation<PlaceFleetRequest>();
 
+        games.MapGet("/", Recent)
+            .WithName("RecentGames");
+
+        routes.MapGet("/stats", Overall)
+            .WithName("Statistics")
+            .WithTags("Games");
+
         return routes;
     }
 
@@ -80,9 +87,14 @@ public static class GameEndpoints
 
         var outcome = game.FireFromClient(new Coordinates(request.Column, request.Row));
 
-        return outcome.Rejection is { } rejection
-            ? Refused(rejection)
-            : TypedResults.Ok(outcome.ToResponse(game));
+        if (outcome.Rejection is { } rejection)
+        {
+            return Refused(rejection);
+        }
+
+        repository.Save(game);
+
+        return TypedResults.Ok(outcome.ToResponse(game));
     }
 
     private static IResult PlayBotTurn(Guid id, IGameRepository repository, IBotStrategyFactory strategies)
@@ -94,9 +106,14 @@ public static class GameEndpoints
 
         var outcome = game.PlayBotTurn(strategies.For(game.BotDifficulty));
 
-        return outcome.Rejection is { } rejection
-            ? Refused(rejection)
-            : TypedResults.Ok(outcome.ToResponse(game));
+        if (outcome.Rejection is { } rejection)
+        {
+            return Refused(rejection);
+        }
+
+        repository.Save(game);
+
+        return TypedResults.Ok(outcome.ToResponse(game));
     }
 
     private static IResult PlaceFleet(Guid id, PlaceFleetRequest request, IGameRepository repository)
@@ -112,10 +129,21 @@ public static class GameEndpoints
                 new Coordinates(ship.Column, ship.Row),
                 EnumNames<Orientation>.Parse(ship.Orientation)))]);
 
-        return outcome.Rejection is { } rejection
-            ? Refused(rejection)
-            : TypedResults.Ok(game.ViewForClient().ToResponse());
+        if (outcome.Rejection is { } rejection)
+        {
+            return Refused(rejection);
+        }
+
+        repository.Save(game);
+
+        return TypedResults.Ok(game.ViewForClient().ToResponse());
     }
+
+    private static IResult Recent(IGameHistory history, int limit = 20) =>
+        TypedResults.Ok(history.Recent(Math.Clamp(limit, 1, 100)).Select(summary => summary.ToResponse()));
+
+    private static IResult Overall(IGameHistory history) =>
+        TypedResults.Ok(history.Overall().ToResponse());
 
     private static IResult Refused(FleetRejection rejection) => rejection switch
     {

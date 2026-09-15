@@ -27,6 +27,31 @@ public sealed record PlaceFleetRequest(IReadOnlyList<ShipPlacementDto> Ships);
 /// </summary>
 public sealed record ShipToPlaceDto(string Kind, int Size);
 
+public sealed record GameSummaryResponse(
+    Guid GameId,
+    string Mode,
+    string BotDifficulty,
+    string Status,
+    string FirstPlayer,
+    string SecondPlayer,
+    string? Winner,
+    int Shots,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? FinishedAt);
+
+/// <summary>
+/// Les compteurs bruts, et la précision calculée à partir d'eux. Aucun taux
+/// n'est stocké : un total et sa moyenne ne peuvent pas diverger s'il n'y en a
+/// qu'un des deux.
+/// </summary>
+public sealed record StatisticsResponse(
+    int Games,
+    int Finished,
+    int Shots,
+    int Hits,
+    int Sunk,
+    double Accuracy);
+
 public sealed record CoordinatesDto(int Column, int Row);
 
 public sealed record ShipDto(
