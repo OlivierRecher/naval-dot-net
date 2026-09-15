@@ -46,7 +46,8 @@ Aucune de ces lignes ne se discute ni ne se contourne.
 Libres selon le support, donc à défendre. Toutes paramétrables dès le départ.
 
 - Grille **10 × 10**.
-- Flotte : `Carrier` 5 · `Battleship` 4 · `Cruiser` 3 · `Submarine` 3 · `Destroyer` 2.
+- Flotte **par défaut** : `Carrier` 5 · `Battleship` 4 · `Cruiser` 3 · `Submarine` 3 · `Destroyer` 2.
+  Personnalisable depuis l'item 6, `PatrolBoat` 1 compris. Voir ADR 0013.
 - Placement **horizontal ou vertical** uniquement. Chevauchement interdit,
   **contact autorisé** (deux navires peuvent se toucher).
 - **Le tour passe toujours**, touché ou non.
@@ -113,7 +114,7 @@ est à rejeter.
 ## 5. Contrat d'API
 
 ```
-POST   /games                 → 201 GameView   (mode, botDifficulty, fleetPlacement)
+POST   /games                 → 201 GameView   (mode, botDifficulty, fleetPlacement, fleet)
 GET    /games/{id}            → 200 GameView | 404
 POST   /games/{id}/shots      → 200 ShotOutcome | 400 | 404 | 409
 POST   /games/{id}/bot-turn   → 200 ShotOutcome | 404 | 409
@@ -236,7 +237,7 @@ et comprise par le binôme. »
 3. ~~**Placement manuel de la flotte** — le placement aléatoire reste offert~~ — livré, ADR 0010
 4. ~~**Multijoueur local (hot-seat)** — écran de passation ; le secret reste garanti côté serveur~~ — livré, ADR 0011
 5. ~~**Persistance + historique + statistiques** — SQLite / EF Core derrière `IGameRepository`~~ — livré, ADR 0012
-6. **Personnalisation** — taille de grille, composition de flotte
+6. ~~**Personnalisation** — taille de grille, composition de flotte~~ — livré, ADR 0013
 7. *(stretch)* Déploiement
 
 Le multijoueur **en ligne est hors périmètre**, décision assumée : trois
@@ -276,6 +277,7 @@ ADR déjà identifiés par le cadrage :
 - `0010` Le statut `AwaitingFleet` se déduit des grilles, et la flotte est validée en bloc
 - `0011` Le hot-seat est une alternance de vues, et la passation protège l'écran
 - `0012` Persister le journal, rejouer le reste
+- `0013` Flotte personnalisable, et pas du damier déduit du plus petit navire
 
 ### `REVUE-IA.md`
 **Trois revues minimum.** Proposition · hypothèse à vérifier · expérience

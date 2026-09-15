@@ -21,6 +21,17 @@ public sealed class CreateGameRequestValidator : AbstractValidator<CreateGameReq
         RuleFor(request => request.Rows)
             .InclusiveBetween(MinBoardSide, MaxBoardSide);
 
+        // Chaque nom d'abord, la composition ensuite : inutile d'evaluer une
+        // regle de flotte sur une liste dont un element n'est pas un navire.
+        RuleForEach(request => request.Fleet)
+            .Must(kind => EnumNames<ShipKind>.TryParse(kind, out _))
+            .WithMessage($"Type de navire inconnu : attendu {string.Join(", ", EnumNames<ShipKind>.All)}.");
+
+        RuleFor(request => request.Fleet)
+            .Must(FleetRequestExtensions.FitsTheBoard)
+            .When(request => request.Fleet is { Count: > 0 } fleet && fleet.All(kind => EnumNames<ShipKind>.TryParse(kind, out _)))
+            .WithMessage("Cette flotte ne tient pas sur cette grille : navire trop long, trop de navires, ou grille trop remplie.");
+
         RuleFor(request => request.Mode)
             .Must(mode => EnumNames<GameMode>.TryParse(mode, out _))
             .WithMessage($"Mode de jeu inconnu : attendu {string.Join(", ", EnumNames<GameMode>.All)}.");
@@ -41,6 +52,14 @@ public sealed class CreateGameRequestValidator : AbstractValidator<CreateGameReq
             .Must(difficulty => EnumNames<BotDifficulty>.TryParse(difficulty, out _))
             .WithMessage($"Difficulté de bot inconnue : attendu {string.Join(", ", EnumNames<BotDifficulty>.All)}.");
     }
+}
+
+public static class FleetRequestExtensions
+{
+    internal static bool FitsTheBoard(CreateGameRequest request, IReadOnlyList<string>? fleet) =>
+        FleetTemplateRules.Validate(
+            new BoardSize(request.Columns, request.Rows),
+            [.. fleet!.Select(kind => EnumNames<ShipKind>.Parse(kind))]) is null;
 }
 
 public sealed class FireRequestValidator : AbstractValidator<FireRequest>

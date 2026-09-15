@@ -9,7 +9,7 @@ en défaut, ce qui a réellement été observé, et ce qui reste non vérifié.
 
 Binôme : Olivier Recher (@OlivierRecher) · Ulysse (@Oulssyyy)
 
-**État : 8 revues — 2 adaptées, 1 correctif rejeté, 1 conclusion invalidée, 2 défauts invisibles aux tests, 2 fois des tests qui ne testaient pas.**
+**État : 9 revues — 2 adaptées, 1 correctif rejeté, 1 conclusion invalidée, 2 défauts invisibles aux tests, 2 fois des tests qui ne testaient pas, 1 limite annoncée puis soldée.**
 
 ---
 
@@ -1020,3 +1020,115 @@ D'où la règle retenue : **une décision prise « pour plus tard » doit énonc
 qu'elle promet de façon réfutable**, et l'item qui s'en sert doit aller compter.
 Une promesse vague — « ça facilitera la bascule » — aurait été impossible à
 prendre en défaut, donc sans valeur.
+---
+
+## Revue 9 — Une limite écrite dans un ADR se solde-t-elle le jour venu ?
+
+**Proposition examinée**
+
+L'ADR 0009, rédigé à l'item 2, se termine par une limite qu'il annonce lui-même
+comme grave :
+
+> **Le damier suppose un navire de deux cases minimum.** Le balayage d'une case
+> sur deux de `HuntTargetParity` ne peut rien manquer tant que le plus petit
+> navire occupe deux cases adjacentes. Le jour où la flotte devient
+> personnalisable (item 6), un navire d'une seule case rendrait ce niveau
+> **incorrect**, pas seulement moins bon.
+
+Quatre items plus tard, l'item 6 rend la flotte personnalisable. La proposition
+examinée est donc celle-ci : **cette limite était-elle réelle, et le fait de
+l'avoir écrite a-t-il servi à quelque chose ?**
+
+**Hypothèse à vérifier**
+
+> Avec un navire d'une seule case, le niveau `HuntTargetParity` manque des
+> navires — c'est-à-dire qu'il existe des parties qu'il ne peut pas finir.
+
+C'est une affirmation qui n'avait jamais été testée : au moment où elle est
+écrite, aucun navire d'une case n'existe dans le domaine. Elle est déduite, pas
+observée.
+
+**Expérience**
+
+Ajouter un type d'une case, construire une flotte qui en contient un, et
+observer le balayage du bot — puis regarder si la déduction tient.
+
+Résultat attendu, écrit avant exécution : si la limite est réelle, le damier de
+pas 2 laisse des cases inatteignables, et un navire posé sur l'une d'elles ne
+peut jamais être touché pendant la chasse.
+
+**Observation**
+
+La limite est réelle, et le mécanisme est plus simple que sa formulation.
+
+Le damier de pas 2 ne visite que les cases où `(colonne + ligne)` est pair,
+c'est-à-dire **la moitié de la grille**. Un navire de deux cases occupe
+forcément une case de chaque parité, donc il croise le damier. Un navire d'une
+seule case posé sur une case impaire n'en croise **aucune** : la chasse ne peut
+pas le trouver. Elle finit par le toucher — quand toutes les cases paires sont
+épuisées et que le repli s'enclenche — mais après avoir tiré la moitié de la
+grille pour rien.
+
+Ce qui n'était **pas** prévu par l'ADR 0009, en revanche : la correction n'est
+pas un cas particulier, c'est une **généralisation**. Le raisonnement d'origine —
+« un navire de deux cases croise une case sur deux » — n'est que l'instance L = 2
+de : **un navire de longueur L croise forcément une maille de pas L, jamais
+moins.** Le pas suit donc le plus petit navire de la flotte, et la flotte
+classique retrouve le damier d'origine sans qu'on l'y force.
+
+**Décision et justification**
+
+**Limite confirmée, soldée par une généralisation.**
+
+`HuntTargetParityBot` ne porte plus de constante. Il lit la composition dans la
+`GameView` — publique, puisqu'elle est annoncée à la création et partagée par les
+deux joueurs — et en déduit son pas. Avec une vedette d'une case, le pas vaut 1 :
+le niveau devient un `HuntTarget` ordinaire. Il ne fait pas mieux, mais il ne
+manque rien.
+
+Le type `PatrolBoat` a été ajouté **pour rendre le cas atteignable**. Sans lui,
+la limite serait restée théorique et la généralisation invérifiable : on aurait
+écrit un code plus général sans pouvoir montrer qu'il l'était.
+
+**Preuves et limites**
+
+| | |
+|---|---|
+| Limite annoncée | ADR 0009, item 2 |
+| Cas rendu atteignable | `ShipKind.PatrolBoat`, une case |
+| Damier, flotte classique | Une case sur deux, 100 graines |
+| Damier, navire d'une case | Toute la grille |
+| Damier, plus petit navire de 3, 4, 5 | Pas 3, 4, 5 |
+| Mutation — pas figé à 2 | 5 tests au rouge sur 7 |
+| Mutation — pas suivant le plus **grand** navire | 3 tests au rouge sur 7 |
+
+Ce qui **reste non vérifié** :
+
+- Le coût réel du damier n'a **pas été remesuré** par composition. On sait que le
+  pas est correct pour chaque flotte ; on ne sait pas combien de tirs il fait
+  gagner sur une flotte de vedettes, ni si `HuntTargetParity` reste
+  systématiquement meilleur que `HuntTarget` hors flotte classique. Les tests de
+  classement de l'item 2 ne portent que sur la flotte standard.
+- La garantie « un navire de longueur L croise une maille de pas L » est
+  démontrée pour les mailles diagonales `(colonne + ligne) % L`. Aucun test ne
+  l'établit pour une autre forme de maille ; c'est un raisonnement, pas une
+  mesure.
+- Rien n'empêche une flotte de ne contenir que des vedettes, ce qui réduit le
+  niveau `Vétéran` au niveau `Chasseur` sans que l'interface le dise.
+
+**Ce que cette revue enseigne pour la suite du projet**
+
+Une limite écrite dans un ADR n'est utile que si quelqu'un revient la chercher.
+Celle-ci a tenu quatre items, nommait l'item qui la déclencherait, et disait
+précisément ce qui casserait — « incorrect, pas seulement moins bon ». C'est cette
+précision qui l'a rendue actionnable : elle indiquait quoi construire pour la
+mettre à l'épreuve.
+
+La règle retenue : **une limite connue se formule avec son déclencheur et sa
+conséquence**, pas comme une réserve générale. « Ce niveau suppose des navires
+d'au moins deux cases » aurait été vrai et inerte ; « l'item 6 le rendra
+incorrect » a produit un test, un type, et une généralisation.
+
+Deuxième enseignement : la correction d'une limite est souvent une
+généralisation, pas une rustine. Le code d'origine n'était pas faux — il était le
+cas particulier d'une règle qu'on n'avait pas écrite.

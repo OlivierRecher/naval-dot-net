@@ -763,3 +763,81 @@ distingue. La seconde est la plus instructive — le correctif introduisait une
 distinction juste, et rien ne la protégeait.
 
 **Commits** : branche `feat/persistance`, PR #7.
+
+---
+
+## 2026-09-15 — Personnalisation : taille de grille et composition de flotte
+
+**Outil / modèle** : Claude Code (Opus 5)
+
+**Contexte**
+Item 6, dernier du backlog. Deux ADR précédents lui avaient laissé une dette
+explicite : l'ADR 0010 notait que le gabarit de flotte était en dur dans
+`Game.PlaceFleetFromClient`, et l'ADR 0009 annonçait que le damier du bot
+`Vétéran` deviendrait **incorrect** — pas seulement moins bon — le jour où un
+navire d'une seule case existerait.
+
+**Prompt**
+Livrer la personnalisation de la flotte, la taille de grille étant déjà
+paramétrable depuis le socle. Commencer par la dette de l'ADR 0009 : rendre le
+cas d'un navire d'une case atteignable, vérifier que la limite annoncée est
+réelle, puis corriger. Trancher ensuite ce qu'une composition doit respecter
+pour être acceptée — et justifier chaque borne plutôt que de la choisir.
+
+**Réponse résumée**
+
+| Sujet | Décision |
+|---|---|
+| Où vit la composition | Sur `Game`, comme le mode et la difficulté. Fixée à la création, persistée avec la partie |
+| Ce qu'elle doit respecter | Non vide, ≤ 15 navires, aucun navire plus long que la grille, ≤ 1/3 de la grille occupé |
+| Le plafond de densité | **Mesuré, pas choisi** : la flotte la plus dense acceptée se place sur 200 graines sans un échec |
+| Le damier du bot | Le pas suit le **plus petit navire** de la flotte — généralisation de la règle d'origine |
+| Longueurs | Restent attachées aux types : on choisit combien de navires de quels types |
+
+**Décision** : acceptée.
+
+Le point qui compte est le damier. La formulation d'origine — « un navire de deux
+cases croise une case sur deux » — n'était que l'instance L = 2 de « un navire de
+longueur L croise une maille de pas L ». La correction n'est donc pas un cas
+particulier ajouté mais une règle générale écrite ; la flotte classique retrouve
+le damier d'origine sans qu'on l'y force. Voir `REVUE-IA.md`, revue 9.
+
+Le plafond de densité mérite aussi d'être défendu : il refuse des flottes qui
+*pourraient* tenir. La raison est que le placement aléatoire échoue de façon
+**aléatoire** au-delà d'une certaine densité — le même joueur verrait la même
+composition acceptée puis refusée. Le plafond échange une acceptation aléatoire
+contre un refus prévisible, et sa valeur est établie par exécution.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 246 tests, 0 échec (221 avant l'item) |
+| Damier, flotte classique | Une case sur deux, 100 graines |
+| Damier, navire d'une case | Couvre toute la grille — la limite de l'ADR 0009 est soldée |
+| Damier, plus petit navire de 3, 4, 5 | Pas 3, 4, 5 |
+| Plafond de densité | Flotte la plus dense acceptée, placée sur 200 graines sans un échec |
+| Placement manuel | Contrôle la composition **de la partie** — dette de l'ADR 0010 |
+| Flotte personnalisée après redémarrage | Retrouvée à l'identique |
+| Parcours navigateur | Flotte réduite à un croiseur, un torpilleur et une vedette ; garde de densité déclenché à 37 % ; partie jouée |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- Le **coût** du damier n'a pas été remesuré par composition. On sait que le pas
+  est correct pour chaque flotte ; on ne sait pas si `HuntTargetParity` reste
+  meilleur que `HuntTarget` hors flotte classique. Les tests de classement de
+  l'item 2 ne portent que sur la flotte standard.
+- Le plafond d'un tiers est établi sur la plus petite grille autorisée. Il est
+  plus conservateur sur les grandes.
+- Rien n'empêche une flotte de ne contenir que des vedettes, ce qui réduit le
+  niveau `Vétéran` au niveau `Chasseur` sans que l'interface le dise.
+
+**Constat de méthode**
+Deux des six mutations de cet item n'étaient d'abord détectées **que** par les
+tests de domaine. Côté API, une flotte impossible finit aussi en 400 — par échec
+du placement aléatoire, pas par la validation. Le statut seul ne distinguait donc
+pas le refus déterministe du refus par hasard, alors que c'est précisément la
+différence que la règle introduit. Le test d'API vérifie désormais la **forme** de
+la réponse.
+
+**Commits** : branche `feat/personnalisation`, PR #8.

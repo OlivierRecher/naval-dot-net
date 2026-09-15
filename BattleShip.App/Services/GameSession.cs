@@ -61,11 +61,12 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
         string mode,
         string botDifficulty,
         string fleetPlacement,
-        string? opponentName)
+        string? opponentName,
+        IReadOnlyList<string>? fleet)
     {
         await RunAsync(async () =>
         {
-            var response = await http.PostAsJsonAsync("games", new CreateGameRequest(playerName, side, side, mode, botDifficulty, fleetPlacement, opponentName));
+            var response = await http.PostAsJsonAsync("games", new CreateGameRequest(playerName, side, side, mode, botDifficulty, fleetPlacement, opponentName, fleet));
 
             if (!response.IsSuccessStatusCode)
             {

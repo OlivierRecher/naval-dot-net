@@ -33,7 +33,7 @@ balayage.
 | Chasse | `Hunt` | La phase où aucun navire touché n'est en cours de traque : le bot choisit une case parmi celles qu'il n'a pas encore visées. |
 | Traque | `Track` | La phase où au moins une case touchée appartient à un navire encore à flot : le bot ne vise plus que le voisinage de ces cases. |
 | Case en attente | `Pending` | Une case touchée dont le navire n'est pas connu comme coulé. C'est ce qui déclenche la traque ; quand il n'en reste aucune, le bot retourne chasser. |
-| Damier | `ScanLattice` | Le sous-ensemble de cases balayées par `HuntTargetParity` pendant la **chasse** — une case sur deux. Il ne s'applique jamais à la traque, dont les cibles sont toutes de la parité opposée à la case touchée. |
+| Damier | `ScanStride` | Le pas du balayage de `HuntTargetParity` pendant la **chasse**. Il vaut la longueur du **plus petit navire** de la flotte : un navire de longueur L croise forcément une maille de pas L. Deux pour la flotte classique, un dès qu'un navire n'occupe qu'une case. Il ne s'applique jamais à la traque. |
 
 ## Plateau
 
@@ -50,7 +50,8 @@ balayage.
 |---|---|---|
 | Flotte | `Fleet` | L'ensemble des navires d'un joueur. |
 | Navire | `Ship` | Une pièce occupant plusieurs cases contiguës en ligne droite. |
-| Type de navire | `ShipKind` | `Carrier` (5), `Battleship` (4), `Cruiser` (3), `Submarine` (3), `Destroyer` (2). |
+| Type de navire | `ShipKind` | `Carrier` (5), `Battleship` (4), `Cruiser` (3), `Submarine` (3), `Destroyer` (2), `PatrolBoat` (1). La longueur est attachée au type : on choisit combien de navires de quels types, pas des longueurs libres. |
+| Composition | `Fleet` | Les types de navires en jeu, répétitions comprises. Identique pour les deux joueurs, fixée à la création. Publique : elle est annoncée, et elle ne dit rien des positions. |
 | Orientation | `Orientation` | `Horizontal` ou `Vertical`. Aucune diagonale. |
 | Placement | `FleetPlacement` | Qui pose la flotte de l'humain : `Random` (le serveur) ou `Manual` (le joueur, navire par navire). Choisi à la création, il ne change plus. |
 | Flotte à poser | `FleetToPlace` | La composition que le serveur réclame au joueur : un type et une longueur par navire, **aucune position**. C'est le serveur qui dicte la flotte ; le front n'a aucune règle de jeu à connaître. |

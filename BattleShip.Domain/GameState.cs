@@ -18,6 +18,7 @@ public readonly record struct GameState(
     BotDifficulty BotDifficulty,
     GameStatus Status,
     BoardSize Size,
+    IReadOnlyList<ShipKind> Fleet,
     string? WinnerName,
     PlayerState First,
     PlayerState Second,

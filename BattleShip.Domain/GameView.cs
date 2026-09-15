@@ -30,4 +30,10 @@ public sealed record GameView(
     IReadOnlyList<RevealedCell> ShotsFired,
     BotDifficulty BotDifficulty,
     IReadOnlyList<ShipToPlace> FleetToPlace,
+    /// <summary>
+    /// La composition en jeu, des deux côtés. Publique par construction : elle
+    /// est annoncée à la création et les deux joueurs partagent la même. Elle ne
+    /// dit rien des positions. Le bot en déduit le pas de son balayage.
+    /// </summary>
+    IReadOnlyList<ShipToPlace> Fleet,
     string? WinnerName);

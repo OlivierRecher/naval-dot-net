@@ -412,4 +412,31 @@ public class PersistenceTests : IDisposable
         Assert.Equal(game.Winner!.Name, reloaded!.Winner!.Name);
         Assert.Equal([.. game.Shots], [.. reloaded.Shots]);
     }
+
+    /// <summary>
+    /// La composition fait partie de la partie : sans elle, le rejeu reposerait
+    /// des navires que la partie n'a jamais eus, et le placement manuel
+    /// contrôlerait la mauvaise flotte.
+    /// </summary>
+    [Fact]
+    public void ACustomFleet_SurvivesARestart()
+    {
+        IReadOnlyList<ShipKind> fleet = [ShipKind.Cruiser, ShipKind.PatrolBoat, ShipKind.PatrolBoat];
+
+        var placer = new RandomFleetPlacer(new Random(31));
+        var human = new Player("Olivier", isBot: false, placer.Place(BoardSize.Standard, fleet));
+        var bot = new Player("Bot", isBot: true, placer.Place(BoardSize.Standard, fleet));
+        var game = new Game(GameMode.Solo, human, bot, BotDifficulty.HuntTargetParity, fleet);
+
+        var repository = AfterRestart();
+        repository.Add(game);
+        game.FireFromClient(new Coordinates(0, 0));
+        repository.Save(game);
+
+        var reloaded = AfterRestart().Find(game.Id);
+
+        Assert.Equal(fleet, reloaded!.Fleet);
+        Assert.Equal(3, reloaded.ViewForClient().OwnFleet.Count);
+        Assert.Equal([3, 1, 1], reloaded.ViewForClient().Fleet.Select(ship => ship.Size).ToList());
+    }
 }

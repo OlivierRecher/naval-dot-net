@@ -21,15 +21,16 @@ public class HuntTargetBot(Random random) : IBotStrategy
 
         var pending = damaged.Where(cell => !BelongsToASunkShip(cell, sunk, damaged)).ToHashSet();
 
-        return Track(pending, fired, size) ?? Hunt(fired, size);
+        return Track(pending, fired, size) ?? Hunt(fired, size, ScanStride(view));
     }
 
     /// <summary>
-    /// Le damier de balayage, ici la grille entière. Redéfini par
-    /// <see cref="HuntTargetParityBot"/>. Il ne s'applique qu'à la chasse : la
-    /// traque doit pouvoir atteindre n'importe quel voisin d'une case touchée.
+    /// Le pas du damier de balayage. 1 signifie « toutes les cases », ce que fait
+    /// ce niveau-ci. <see cref="HuntTargetParityBot"/> le déduit de la flotte.
+    /// Il ne s'applique qu'à la chasse : la traque doit pouvoir atteindre
+    /// n'importe quel voisin d'une case touchée.
     /// </summary>
-    protected virtual bool IsOnScanLattice(Coordinates cell) => true;
+    protected virtual int ScanStride(GameView view) => 1;
 
     private Coordinates? Track(HashSet<Coordinates> pending, HashSet<Coordinates> fired, BoardSize size)
     {
@@ -49,7 +50,7 @@ public class HuntTargetBot(Random random) : IBotStrategy
         return Pick(alongAKnownLine.Count > 0 ? alongAKnownLine : candidates);
     }
 
-    private Coordinates Hunt(HashSet<Coordinates> fired, BoardSize size)
+    private Coordinates Hunt(HashSet<Coordinates> fired, BoardSize size, int stride)
     {
         var free = AllCells(size).Where(cell => !fired.Contains(cell)).ToList();
 
@@ -58,7 +59,7 @@ public class HuntTargetBot(Random random) : IBotStrategy
             throw new InvalidOperationException("Aucune case disponible : la partie aurait dû être terminée.");
         }
 
-        var scanned = free.Where(IsOnScanLattice).ToList();
+        var scanned = free.Where(cell => (cell.Column + cell.Row) % stride is 0).ToList();
 
         return Pick(scanned.Count > 0 ? scanned : free);
     }
@@ -121,11 +122,16 @@ public class HuntTargetBot(Random random) : IBotStrategy
 }
 
 /// <summary>
-/// Même traque, chasse deux fois moins coûteuse : le plus petit navire de la
-/// flotte occupant deux cases adjacentes, il croise forcément le damier. La
-/// garantie tient tant qu'aucun navire n'occupe une seule case.
+/// Même traque, chasse moins coûteuse : un navire de longueur L croise
+/// forcément une maille de pas L, jamais moins. Le pas suit donc le plus petit
+/// navire de la flotte en jeu — 2 pour la flotte standard, 1 dès qu'un navire
+/// n'occupe qu'une case, ce qui ramène le balayage à la grille entière.
+///
+/// Sans information de flotte, le pas vaut 1 : mieux vaut balayer trop que
+/// manquer un navire. Voir ADR 0013.
 /// </summary>
 public sealed class HuntTargetParityBot(Random random) : HuntTargetBot(random)
 {
-    protected override bool IsOnScanLattice(Coordinates cell) => (cell.Column + cell.Row) % 2 is 0;
+    protected override int ScanStride(GameView view) =>
+        view.Fleet.Count is 0 ? 1 : view.Fleet.Min(ship => ship.Size);
 }
