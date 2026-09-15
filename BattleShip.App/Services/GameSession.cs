@@ -22,6 +22,10 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
     public event Action? OnChange;
 
+    public IReadOnlyList<GameSummaryResponse> History { get; private set; } = [];
+
+    public StatisticsResponse? Statistics { get; private set; }
+
     public bool IsOver => View?.Status == nameof(GameStatusNames.Finished);
 
     public bool IsPlacingFleet => View?.Status == nameof(GameStatusNames.AwaitingFleet);
@@ -205,6 +209,21 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
             HandoverTo = null;
 
             Notice = "Flotte en place. À vous de jouer.";
+        });
+    }
+
+    /// <summary>
+    /// L'historique passe par ce service comme le reste : AGENTS.md § 6 veut un
+    /// seul chemin reseau, donc un seul endroit ou vivent « chargement, succes,
+    /// echec ». Une page qui appellerait HttpClient elle-meme en creerait un
+    /// second, avec sa propre gestion d'erreur.
+    /// </summary>
+    public async Task LoadHistoryAsync()
+    {
+        await RunAsync(async () =>
+        {
+            Statistics = await http.GetFromJsonAsync<StatisticsResponse>("stats");
+            History = await http.GetFromJsonAsync<List<GameSummaryResponse>>("games?limit=20") ?? [];
         });
     }
 

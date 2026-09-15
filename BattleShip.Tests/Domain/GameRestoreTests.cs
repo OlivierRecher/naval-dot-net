@@ -127,4 +127,27 @@ public class GameRestoreTests
 
         Assert.Equal(GameStatus.AwaitingFleet, game.Status);
     }
+
+    /// <summary>
+    /// Le siège est l'ordre d'<b>ouverture</b>, pas l'ordre du tour : il ne bouge
+    /// jamais, alors que <c>CurrentPlayer</c> change à chaque tir. Le rejeu en
+    /// dépend — inverser les sièges rejouerait la partie à l'envers.
+    /// </summary>
+    [Fact]
+    public void Snapshot_NamesTheOpeningPlayerFirst_EvenAfterTheTurnHasPassed()
+    {
+        var placer = new RandomFleetPlacer(new Random(9));
+        var olivier = new Player("Olivier", isBot: false, placer.Place(BoardSize.Standard, FleetTemplate.Standard));
+        var ulysse = new Player("Ulysse", isBot: false, placer.Place(BoardSize.Standard, FleetTemplate.Standard));
+        var game = new Game(GameMode.Local, olivier, ulysse);
+
+        Assert.Equal("Olivier", game.Snapshot().First.Name);
+        Assert.Equal("Ulysse", game.Snapshot().Second.Name);
+
+        game.FireFromClient(new Coordinates(0, 0));
+
+        Assert.Equal("Ulysse", game.CurrentPlayer.Name);
+        Assert.Equal("Olivier", game.Snapshot().First.Name);
+        Assert.Equal("Ulysse", game.Snapshot().Second.Name);
+    }
 }

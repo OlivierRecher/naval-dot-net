@@ -320,4 +320,96 @@ public class PersistenceTests : IDisposable
             File.Delete(file);
         }
     }
+
+    /// <summary>
+    /// Remarque de la revue de la PR #7. <c>Save</c> lisait le statut, les joueurs
+    /// et les grilles hors du verrou de l'agrégat, alors que l'échange de tour est
+    /// une affectation de tuple — non atomique — et que <c>Board.Ships</c> est une
+    /// liste vivante. Une écriture pendant une partie jouée en parallèle pouvait
+    /// mélanger deux instants ou lever une exception d'énumération.
+    /// </summary>
+    [Fact]
+    public void Save_WhileTheGameIsBeingPlayed_NeverObservesATornState()
+    {
+        var game = NewGame();
+        var repository = AfterRestart();
+        repository.Add(game);
+
+        var strategy = new BotStrategyFactory(new Random(31)).For(BotDifficulty.HuntTarget);
+        var failures = new List<string>();
+        using var stop = new ManualResetEventSlim(false);
+
+        var player = new Thread(() =>
+        {
+            while (!stop.IsSet && game.Status is GameStatus.InProgress)
+            {
+                game.FireFromClient(new Coordinates(Random.Shared.Next(10), Random.Shared.Next(10)));
+                game.PlayBotTurn(strategy);
+            }
+        });
+
+        var writer = new Thread(() =>
+        {
+            for (var round = 0; round < 20_000; round++)
+            {
+                try
+                {
+                    var state = game.Snapshot();
+
+                    // Le journal est copie pendant qu'un autre fil l'alimente :
+                    // sans verrou, l'enumeration finit par lever.
+                    if (state.Shots.Count > 0 && state.Status is GameStatus.AwaitingFleet)
+                    {
+                        failures.Add("des tirs dans une partie qui attend sa flotte");
+                    }
+                }
+                catch (Exception error)
+                {
+                    failures.Add(error.GetType().Name);
+                }
+            }
+
+            stop.Set();
+        });
+
+        player.Start();
+        writer.Start();
+        writer.Join();
+        player.Join();
+
+        Assert.Empty(failures);
+    }
+
+    /// <summary>
+    /// Remarque de la revue de la PR #7. Une partie terminée ne change plus :
+    /// la garder en mémoire ferait croître le cache sans borne sur un serveur qui
+    /// vit longtemps, et son verrou ne protège plus rien.
+    /// </summary>
+    [Fact]
+    public void AFinishedGame_LeavesTheCache()
+    {
+        var game = NewGame();
+        var cache = new GameCache();
+        var repository = new SqliteGameRepository(NewContext(), cache);
+        repository.Add(game);
+
+        Assert.NotNull(cache.Remembered(game.Id));
+
+        var strategy = new BotStrategyFactory(new Random(31)).For(BotDifficulty.HuntTargetParity);
+        foreach (var cell in Enumerable.Range(0, 100).Select(i => new Coordinates(i % 10, i / 10)))
+        {
+            if (game.Status is GameStatus.Finished) break;
+            game.FireFromClient(cell);
+            game.PlayBotTurn(strategy);
+            repository.Save(game);
+        }
+
+        Assert.Equal(GameStatus.Finished, game.Status);
+        Assert.Null(cache.Remembered(game.Id));
+
+        // Oubliee, pas perdue : elle se relit depuis SQLite, a l'identique.
+        var reloaded = new SqliteGameRepository(NewContext(), cache).Find(game.Id);
+        Assert.Equal(game.Winner!.Name, reloaded!.Winner!.Name);
+        Assert.Equal([.. game.Shots], [.. reloaded.Shots]);
+    }
 }

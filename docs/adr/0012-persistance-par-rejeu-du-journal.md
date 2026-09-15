@@ -48,6 +48,20 @@ dérivable. Le rejeu ne le lit jamais ; il n'existe que pour rendre les
 statistiques interrogeables en SQL sans rejouer des centaines de journaux. Un
 test interdit qu'il diverge de ce que le rejeu recalcule.
 
+## Décision 1 bis — la persistance lit l'agrégat sous son verrou
+
+Ajoutée par la revue de la PR #7. Écrire une partie demande de lire son statut,
+ses deux joueurs, leurs grilles et son journal. Les lire **une par une** revient
+à les lire à des instants différents : l'échange de tour est une affectation de
+tuple, donc non atomique, et `Board.Ships` est une liste vivante. Une écriture
+concurrente d'un tir pouvait donc mélanger deux instants, ou lever une exception
+d'énumération.
+
+`Game.Snapshot()` rend une photographie cohérente, prise sous le verrou, et la
+persistance ne travaille plus que là-dessus. Les sièges qu'elle publie sont
+l'ordre d'**ouverture**, jamais l'ordre du tour courant : c'est cet ordre-là que
+le rejeu attend.
+
 ## Décision 2 — SQLite détient le journal, la mémoire détient la partie
 
 Reconstruire la partie à chaque lecture rendrait **deux instances** à deux
@@ -100,6 +114,14 @@ Voir `REVUE-IA.md`, revue 8.
 - Pas de migrations : le schéma est créé au démarrage s'il manque
   (`EnsureCreated`). Le périmètre ne comporte aucune évolution de schéma à
   rejouer, et une migration vide serait un rituel sans objet.
+- Une partie **terminée quitte le cache**. Elle ne change plus, son verrou ne
+  protège plus rien, et la garder ferait croître la mémoire sans borne sur un
+  serveur qui vit longtemps. SQLite suffit à la relire. Ajouté par la revue de la
+  PR #7.
+- Le statut `AwaitingFleet` de l'historique se **déduit des flottes** — un humain
+  sans navire — et non d'une colonne de plus. La première version publiait
+  `InProgress` pour toute partie non terminée, donc un statut faux tant que les
+  flottes n'étaient pas posées. Ajouté par la revue de la PR #7.
 - **Limite assumée** : le cache et le verrou ne couvrent **qu'un processus**. Deux
   instances de l'API sur la même base joueraient chacune sur sa propre copie.
   L'ADR 0008 l'annonçait ; cet item ne le corrige pas, il le confirme.
@@ -141,6 +163,12 @@ un test qui ne protégeait rien, jamais un défaut du code :
 | `Remember` écrase au lieu de publier | **survivante** | Test ajouté : lecture concurrente sur cache froid |
 | Les statistiques oublient les navires coulés | **survivante** | Test tautologique remplacé par un témoin indépendant |
 | L'historique ne trie plus | 1 / 7 | — |
+
+Quatre mutations de plus après la revue de la PR #7, toutes détectées :
+`Snapshot` sans verrou, sièges suivant le tour courant, partie terminée gardée en
+cache, historique ignorant l'attente de flotte. Les deux premières ont d'abord
+survécu — l'une parce que le test ne mettait pas assez de pression, l'autre parce
+qu'aucun test ne distinguait l'ordre d'ouverture de l'ordre du tour.
 
 À réexaminer si l'API devait tourner en plusieurs instances : le cache, le verrou
 et l'absence de verrou optimiste tomberaient ensemble.

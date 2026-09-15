@@ -24,6 +24,7 @@ public sealed class SqliteGameHistory(BattleShipDbContext db) : IGameHistory
                 game.StartedAt,
                 game.FinishedAt,
                 Shots = game.Shots.Count,
+                AwaitingFleet = game.Players.Any(player => !player.IsBot && !player.Ships.Any()),
                 First = game.Players.Where(player => player.Seat == 0).Select(player => player.Name).FirstOrDefault(),
                 Second = game.Players.Where(player => player.Seat == 1).Select(player => player.Name).FirstOrDefault()
             })
@@ -32,7 +33,9 @@ public sealed class SqliteGameHistory(BattleShipDbContext db) : IGameHistory
                 game.Id,
                 EnumNames<GameMode>.Parse(game.Mode),
                 EnumNames<BotDifficulty>.Parse(game.BotDifficulty),
-                game.FinishedAt is null ? GameStatus.InProgress : GameStatus.Finished,
+                game.FinishedAt is not null ? GameStatus.Finished
+                    : game.AwaitingFleet ? GameStatus.AwaitingFleet
+                    : GameStatus.InProgress,
                 game.First ?? string.Empty,
                 game.Second ?? string.Empty,
                 game.WinnerName,

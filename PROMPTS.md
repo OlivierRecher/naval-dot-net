@@ -697,3 +697,69 @@ défaut de la revue 2, reproduit quatre items plus loin, par la même personne q
 l'avait écrite.
 
 **Commits** : branche `feat/persistance`, PR #7.
+
+---
+
+## 2026-09-15 — Traitement de la revue de la PR #7
+
+**Outil / modèle** : Claude Code (Opus 5) · relecteur : GitHub Copilot code review
+
+**Contexte**
+Cinq commentaires sur la persistance. Contrairement aux revues précédentes,
+aucun ne portait sur un écart entre le code et ce que la PR annonçait : tous
+portaient sur du code.
+
+**Réponse résumée**
+
+| # | Remarque | Traitement |
+|---|---|---|
+| 1 | `Save` lit l'agrégat **hors de son verrou** | Retenue — la plus sérieuse |
+| 2 | L'historique annonce `InProgress` pour une partie qui attend sa flotte | Retenue |
+| 3 | Le cache ne relâche jamais les parties terminées | Retenue |
+| 4 | La page d'historique appelle `HttpClient` directement, contre `AGENTS.md` § 6 | Retenue |
+| 5 | Faute d'orthographe dans un commentaire | Retenue |
+
+**Décision** : 5 retenues sur 5.
+
+La première méritait sa place en tête. `Save` lisait `Status`, `CurrentPlayer`,
+`Opponent` et énumérait `Board.Ships` sans prendre le verrou de `Game`. Or
+l'échange de tour est une affectation de tuple — non atomique — et `Board.Ships`
+rend la liste vivante. Une écriture concurrente d'un tir pouvait donc persister un
+état mélangeant deux instants, ou lever une exception d'énumération.
+`Game.Snapshot()` rend désormais une photographie prise sous le verrou.
+
+La quatrième est un rappel à une règle que le projet s'était donnée et que sa
+propre page violait : `AGENTS.md` § 6 impose que tous les appels réseau passent
+par `GameSession`. La page d'historique avait son propre `HttpClient` et sa propre
+gestion d'erreur — un second chemin réseau, avec un second endroit où « chargement,
+succès, échec » devait être tenu à jour.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 221 tests, 0 échec (217 avant la revue) |
+| Mutation — `Snapshot` sans verrou | **A d'abord survécu** : 200 tours ne suffisaient pas. À 20 000, le test attrape l'exception d'énumération |
+| Mutation — sièges suivant le tour courant | **A d'abord survécu** : aucun test ne distinguait l'ordre d'ouverture de l'ordre du tour. Test ajouté |
+| Mutation — partie terminée gardée en cache | 1 test au rouge |
+| Mutation — historique ignorant l'attente de flotte | 1 test au rouge |
+| Appels réseau hors `GameSession` | `grep` sur la page : aucun |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- Le test de cohérence sous concurrence **attrape l'occurrence** d'une lecture
+  déchirée, il n'établit pas son absence. Il a fallu 20 000 tours pour la
+  produire de façon fiable sur cette machine ; rien ne garantit qu'une machine
+  plus lente la produirait.
+- L'éviction du cache à la fin d'une partie n'est pas éprouvée **sous
+  concurrence** : une lecture simultanée à l'éviction rechargerait la partie
+  depuis SQLite, ce qui est correct, mais aucun test ne l'instancie.
+
+**Constat de méthode**
+Deux des quatre mutations posées après la revue ont survécu au premier passage,
+pour deux raisons différentes : l'une parce que le test ne mettait pas assez de
+pression, l'autre parce qu'aucun test ne distinguait deux notions que le code
+distingue. La seconde est la plus instructive — le correctif introduisait une
+distinction juste, et rien ne la protégeait.
+
+**Commits** : branche `feat/persistance`, PR #7.

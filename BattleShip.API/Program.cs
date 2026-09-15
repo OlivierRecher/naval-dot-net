@@ -43,7 +43,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     // Pas de migrations : le schema est cree au demarrage s'il manque. Le
-    // periemetre ne comporte aucune evolution de schema a rejouer. ADR 0012.
+    // périmètre ne comporte aucune evolution de schema a rejouer. ADR 0012.
     scope.ServiceProvider.GetRequiredService<BattleShipDbContext>().Database.EnsureCreated();
 }
 

@@ -130,4 +130,38 @@ public class HistoryEndpointsTests(ApiFactory factory) : IClassFixture<ApiFactor
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotEmpty((await response.Content.ReadFromJsonAsync<List<GameSummaryResponse>>())!);
     }
+
+    /// <summary>
+    /// Remarque de la revue de la PR #7. Une partie en placement manuel n'est ni
+    /// terminée ni en cours : l'historique l'annonçait « InProgress » tant que
+    /// les flottes n'étaient pas posées. Le statut se déduit des flottes, aucune
+    /// colonne n'a été ajoutée pour cela.
+    /// </summary>
+    [Fact]
+    public async Task RecentGames_ReportAGameStillWaitingForItsFleet()
+    {
+        using var isolated = new ApiFactory();
+        var client = isolated.CreateClient();
+
+        var created = await client.PostAsJsonAsync(
+            "/games", new CreateGameRequest("Olivier", 10, 10, "Solo", "Random", "Manual"));
+        var view = (await created.Content.ReadFromJsonAsync<GameViewResponse>())!;
+
+        var history = await client.GetFromJsonAsync<List<GameSummaryResponse>>("/games");
+
+        Assert.Equal("AwaitingFleet", history!.Single(summary => summary.GameId == view.GameId).Status);
+
+        await client.PutAsJsonAsync($"/games/{view.GameId}/fleet", new PlaceFleetRequest(
+        [
+            new("Carrier", 0, 0, "Vertical"),
+            new("Battleship", 2, 0, "Vertical"),
+            new("Cruiser", 4, 0, "Vertical"),
+            new("Submarine", 6, 0, "Vertical"),
+            new("Destroyer", 8, 0, "Vertical")
+        ]));
+
+        history = await client.GetFromJsonAsync<List<GameSummaryResponse>>("/games");
+
+        Assert.Equal("InProgress", history!.Single(summary => summary.GameId == view.GameId).Status);
+    }
 }
