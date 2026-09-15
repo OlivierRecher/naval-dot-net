@@ -1,0 +1,35 @@
+@api = https://localhost:7027
+
+### Créer une partie
+# @name create
+POST {{api}}/games
+Content-Type: application/json
+
+{ "playerName": "Olivier", "columns": 10, "rows": 10 }
+
+### Lire l'état courant (toujours la vue du joueur humain)
+GET {{api}}/games/{{create.response.body.gameId}}
+
+### Tirer (équivalent HTTP du tir gRPC)
+POST {{api}}/games/{{create.response.body.gameId}}/shots
+Content-Type: application/json
+
+{ "column": 4, "row": 4 }
+
+### Faire jouer le bot
+POST {{api}}/games/{{create.response.body.gameId}}/bot-turn
+Content-Type: application/json
+
+{}
+
+### Entrée invalide : 400 produit par le filtre de validation
+POST {{api}}/games
+Content-Type: application/json
+
+{ "playerName": "", "columns": 10, "rows": 10 }
+
+### Case déjà visée : 409, le tour n'est pas consommé
+POST {{api}}/games/{{create.response.body.gameId}}/shots
+Content-Type: application/json
+
+{ "column": 4, "row": 4 }

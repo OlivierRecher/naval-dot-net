@@ -1,0 +1,175 @@
+@page "/"
+@using BattleShip.App.Services
+@using BattleShip.Models
+@implements IDisposable
+@inject GameSession Session
+
+<PageTitle>Bataille navale</PageTitle>
+
+<h1 class="mb-3">Bataille navale</h1>
+
+@if (Session.Failure is not null)
+{
+    <div class="alert alert-danger" role="alert">
+        @Session.Failure
+        @if (Session.CanRetryBotTurn)
+        {
+            <button class="btn btn-sm btn-outline-danger ms-2" @onclick="RetryBotTurnAsync">Relancer le tour du bot</button>
+        }
+    </div>
+}
+
+@if (Session.View is null)
+{
+    <div class="card p-3 setup">
+        <h2 class="h5">Nouvelle partie</h2>
+
+        <label class="form-label" for="player">Votre nom</label>
+        <input id="player" class="form-control mb-3" @bind="_playerName" />
+
+        <label class="form-label" for="side">Taille de la grille</label>
+        <input id="side" type="number" min="8" max="20" class="form-control mb-3" @bind="_side" />
+
+        <button class="btn btn-primary" @onclick="StartAsync" disabled="@Session.IsBusy">
+            @(Session.IsBusy ? "Création…" : "Lancer la partie")
+        </button>
+    </div>
+}
+else
+{
+    <div class="status alert @(Session.IsOver ? "alert-success" : "alert-secondary")" role="status">
+        @if (Session.IsOver)
+        {
+            <strong>Partie terminée — @(Session.View.Winner) l'emporte.</strong>
+        }
+        else
+        {
+            <strong>@(Session.View.IsViewerTurn ? "À vous de jouer." : "Le bot joue…")</strong>
+        }
+        @if (Session.Notice is not null)
+        {
+            <span> @Session.Notice</span>
+        }
+    </div>
+
+    <div class="boards">
+        <section>
+            <h2 class="h6">Grille adverse</h2>
+            <div class="grid" style="--columns: @Session.View.Columns">
+                @for (var row = 0; row < Session.View.Rows; row++)
+                {
+                    for (var column = 0; column < Session.View.Columns; column++)
+                    {
+                        var target = new CoordinatesDto(column, row);
+                        var known = _fired.GetValueOrDefault(target);
+
+                        <button type="button"
+                                class="cell @EnemyCellClass(known)"
+                                disabled="@(!Session.CanFire || known is not null)"
+                                title="@Label(target)"
+                                @onclick="() => FireAsync(target)">
+                        </button>
+                    }
+                }
+            </div>
+        </section>
+
+        <section>
+            <h2 class="h6">Votre flotte</h2>
+            <div class="grid" style="--columns: @Session.View.Columns">
+                @for (var row = 0; row < Session.View.Rows; row++)
+                {
+                    for (var column = 0; column < Session.View.Columns; column++)
+                    {
+                        var cell = new CoordinatesDto(column, row);
+                        <div class="cell @OwnCellClass(cell)" title="@Label(cell)"></div>
+                    }
+                }
+            </div>
+
+            <ul class="fleet">
+                @foreach (var ship in Session.View.OwnFleet)
+                {
+                    <li class="@(ship.IsSunk ? "sunk" : null)">
+                        @ship.Kind — @ship.Hits.Count / @ship.Cells.Count
+                    </li>
+                }
+            </ul>
+        </section>
+    </div>
+
+    <button class="btn btn-outline-secondary mt-3" @onclick="Reset">Nouvelle partie</button>
+}
+
+@code {
+    private string _playerName = "Joueur";
+    private int _side = 10;
+
+    private Dictionary<CoordinatesDto, string> _fired = [];
+    private HashSet<CoordinatesDto> _ownShipCells = [];
+    private HashSet<CoordinatesDto> _ownHitCells = [];
+    private HashSet<CoordinatesDto> _sunkCells = [];
+    private HashSet<CoordinatesDto> _incoming = [];
+
+    protected override void OnInitialized() => Session.OnChange += Refresh;
+
+    public void Dispose() => Session.OnChange -= Refresh;
+
+    private void Refresh()
+    {
+        Project();
+        StateHasChanged();
+    }
+
+    private void Project()
+    {
+        var view = Session.View;
+
+        if (view is null)
+        {
+            _fired = [];
+            _ownShipCells = [];
+            _ownHitCells = [];
+            _sunkCells = [];
+            _incoming = [];
+            return;
+        }
+
+        _fired = view.ShotsFired.ToDictionary(shot => shot.Target, shot => shot.Result);
+        _ownShipCells = [.. view.OwnFleet.SelectMany(ship => ship.Cells)];
+        _ownHitCells = [.. view.OwnFleet.SelectMany(ship => ship.Hits)];
+        _sunkCells = [.. view.OwnFleet.Where(ship => ship.IsSunk).SelectMany(ship => ship.Cells)];
+        _incoming = [.. view.ShotsReceived];
+    }
+
+    private async Task StartAsync() => await Session.StartAsync(_playerName, _side);
+
+    private async Task FireAsync(CoordinatesDto target) => await Session.FireAsync(target.Column, target.Row);
+
+    private async Task RetryBotTurnAsync() => await Session.RetryBotTurnAsync();
+
+    private void Reset()
+    {
+        Session.Forget();
+        Project();
+    }
+
+    private static string Label(CoordinatesDto cell) => $"{(char)('A' + cell.Column)}{cell.Row + 1}";
+
+    private static string EnemyCellClass(string? result) => result switch
+    {
+        "Miss" => "cell-miss",
+        "Hit" => "cell-hit",
+        "Sunk" => "cell-sunk",
+        _ => "cell-unknown"
+    };
+
+    private string OwnCellClass(CoordinatesDto cell)
+    {
+        if (_sunkCells.Contains(cell)) return "cell-sunk";
+        if (_ownHitCells.Contains(cell)) return "cell-hit";
+        if (_ownShipCells.Contains(cell)) return "cell-ship";
+        if (_incoming.Contains(cell)) return "cell-miss";
+        return "cell-empty";
+    }
+}

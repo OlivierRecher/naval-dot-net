@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Une nouvelle poussée sur une PR annule le run précédent : inutile de payer
+# deux fois pour un état dépassé.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Compiler et tester
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer le SDK .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          # La version vient de global.json : la CI et les postes de travail
+          # compilent avec le même SDK.
+          global-json-file: global.json
+
+      - name: Restaurer les dépendances
+        run: dotnet restore
+
+      - name: Compiler
+        # GitHub Actions définit CI=true, ce qui rend les avertissements
+        # bloquants via Directory.Build.props. Voir AGENTS.md § 7.
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Exécuter les tests
+        run: dotnet test --no-build --configuration Release --logger "console;verbosity=normal"

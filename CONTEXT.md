@@ -12,7 +12,7 @@ choses sont représentées ni stockées — uniquement ce que les mots désignen
 | Français | Identifiant | Définition |
 |---|---|---|
 | Partie | `Game` | Un affrontement entre exactement deux joueurs, de la création au vainqueur. Identifiée par un `GameId`. |
-| Statut de partie | `GameStatus` | `AwaitingFleets` (flottes non encore placées), `InProgress`, `Finished`. |
+| Statut de partie | `GameStatus` | `InProgress` ou `Finished`. Un troisième statut « flottes non encore placées » n'apparaîtra qu'avec le placement manuel (backlog item 3) : tant qu'il n'existe pas dans le code, il n'existe pas ici. |
 | Mode de jeu | `GameMode` | `Solo` (un humain contre un bot) ou `Local` (deux humains sur le même navigateur, en alternance). |
 | Joueur | `Player` | L'un des deux participants. Un joueur est humain ou bot ; les règles ne font aucune différence entre les deux. |
 | Bot | `Bot` | Joueur piloté par le serveur. **Pas** « IA », « ordinateur » ni « adversaire » — ces mots sont ambigus dans un projet où l'IA désigne aussi l'outil de développement. |
@@ -53,7 +53,8 @@ choses sont représentées ni stockées — uniquement ce que les mots désignen
 
 | Français | Identifiant | Définition |
 |---|---|---|
-| Vue de partie | `GameView` | Ce que le joueur courant a le droit de voir, et rien de plus : sa propre flotte, les tirs reçus, et le résultat de ses propres tirs sur la grille adverse. |
+| Vue de partie | `GameView` | Ce qu'un joueur donné — le **viewer** — a le droit de voir, et rien de plus : sa propre flotte, les tirs reçus, et le résultat de ses propres tirs sur la grille adverse. Le viewer n'est pas toujours le joueur courant : voir `ViewForClient`. |
+| Vue servie au client | `ViewForClient` | La `GameView` que le serveur accepte d'envoyer au navigateur. Elle suit le joueur courant **sauf quand celui-ci est un bot** : un bot n'a pas de client, et lui servir sa vue reviendrait à publier sa flotte. |
 | Passation | `Handover` | En mode `Local`, l'écran qui masque tout pendant le changement de joueur. C'est une **protection d'affichage** ; la protection réelle est que le serveur ne transmet jamais autre chose qu'une `GameView`. |
 
 ## Mots écartés
