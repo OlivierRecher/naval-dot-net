@@ -28,11 +28,11 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
     public bool CanRetryBotTurn => View is not null && !IsOver && !View.IsViewerTurn && !IsBusy;
 
-    public async Task StartAsync(string playerName, int side)
+    public async Task StartAsync(string playerName, int side, string botDifficulty)
     {
         await RunAsync(async () =>
         {
-            var response = await http.PostAsJsonAsync("games", new CreateGameRequest(playerName, side, side));
+            var response = await http.PostAsJsonAsync("games", new CreateGameRequest(playerName, side, side, botDifficulty));
 
             if (!response.IsSuccessStatusCode)
             {
@@ -41,7 +41,7 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
             }
 
             View = await response.Content.ReadFromJsonAsync<GameViewResponse>();
-            Notice = "Partie créée. À vous de jouer.";
+            Notice = $"Partie créée contre le bot {BotDifficultyCatalog.LabelOf(View?.BotDifficulty)}. À vous de jouer.";
         });
     }
 

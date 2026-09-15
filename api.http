@@ -5,7 +5,7 @@
 POST {{api}}/games
 Content-Type: application/json
 
-{ "playerName": "Olivier", "columns": 10, "rows": 10 }
+{ "playerName": "Olivier", "columns": 10, "rows": 10, "botDifficulty": "HuntTargetParity" }
 
 ### Lire l'état courant (toujours la vue du joueur humain)
 GET {{api}}/games/{{create.response.body.gameId}}
@@ -26,10 +26,16 @@ Content-Type: application/json
 POST {{api}}/games
 Content-Type: application/json
 
-{ "playerName": "", "columns": 10, "rows": 10 }
+{ "playerName": "", "columns": 10, "rows": 10, "botDifficulty": "HuntTarget" }
 
 ### Case déjà visée : 409, le tour n'est pas consommé
 POST {{api}}/games/{{create.response.body.gameId}}/shots
 Content-Type: application/json
 
 { "column": 4, "row": 4 }
+
+### Difficulté de bot inconnue : 400 produit par le filtre de validation
+POST {{api}}/games
+Content-Type: application/json
+
+{ "playerName": "Olivier", "columns": 10, "rows": 10, "botDifficulty": "Expert" }

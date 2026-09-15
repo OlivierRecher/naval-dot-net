@@ -19,9 +19,16 @@ public sealed class Game
     private Player _current;
     private Player _waiting;
 
-    public Game(GameMode mode, Player first, Player second)
+    /// <summary>
+    /// Le niveau du bot est une donnee de la partie, comme le mode : il est fixe
+    /// a la creation et ne change plus. Il est optionnel parce qu'une partie
+    /// <see cref="GameMode.Local"/> n'oppose aucun bot — exiger un niveau y
+    /// reviendrait a inventer une donnee sans objet.
+    /// </summary>
+    public Game(GameMode mode, Player first, Player second, BotDifficulty botDifficulty = BotDifficulty.Random)
     {
         Mode = mode;
+        BotDifficulty = botDifficulty;
         _current = first;
         _waiting = second;
     }
@@ -29,6 +36,8 @@ public sealed class Game
     public Guid Id { get; } = Guid.NewGuid();
 
     public GameMode Mode { get; }
+
+    public BotDifficulty BotDifficulty { get; }
 
     public GameStatus Status { get; private set; } = GameStatus.InProgress;
 
@@ -155,6 +164,7 @@ public sealed class Game
             [.. viewer.Board.IncomingShots],
             [.. _shots.Where(shot => shot.ShooterId == viewer.Id)
                       .Select(shot => new RevealedCell(shot.Target, shot.Result))],
+            BotDifficulty,
             Winner?.Name);
     }
 }

@@ -1,6 +1,11 @@
 namespace BattleShip.Models;
 
-public sealed record CreateGameRequest(string PlayerName, int Columns, int Rows);
+/// <summary>
+/// Le niveau du bot voyage en texte et non en énumération : une valeur inconnue
+/// doit produire un 400 de FluentValidation, pas une erreur de désérialisation
+/// avant que le filtre de validation ait pu s'exécuter. Voir ADR 0009.
+/// </summary>
+public sealed record CreateGameRequest(string PlayerName, int Columns, int Rows, string BotDifficulty);
 
 public sealed record FireRequest(int Column, int Row);
 
@@ -29,6 +34,7 @@ public sealed record GameViewResponse(
     IReadOnlyList<ShipDto> OwnFleet,
     IReadOnlyList<CoordinatesDto> ShotsReceived,
     IReadOnlyList<RevealedCellDto> ShotsFired,
+    string BotDifficulty,
     string? Winner);
 
 public sealed record ShotOutcomeResponse(
@@ -37,3 +43,27 @@ public sealed record ShotOutcomeResponse(
     bool GameOver,
     string? Winner,
     GameViewResponse View);
+
+/// <summary>
+/// Catalogue des niveaux proposés au joueur. Il vit dans la bibliothèque
+/// partagée parce que c'est l'API qui accepte les noms et le front qui les
+/// propose : le test <c>BotDifficultyEndpointsTests</c> interdit qu'ils divergent de
+/// l'énumération du domaine.
+/// </summary>
+public sealed record BotDifficultyOption(string Name, string Label, string Summary);
+
+public static class BotDifficultyCatalog
+{
+    public static IReadOnlyList<BotDifficultyOption> All { get; } =
+    [
+        new("Random", "Novice", "Tire au hasard sur les cases encore libres."),
+        new("HuntTarget", "Chasseur", "Traque un navire touché jusqu'à le couler."),
+        new("HuntTargetParity", "Vétéran", "Traque, et balaie la grille en damier.")
+    ];
+
+    public static string LabelOf(string? name) =>
+        All.FirstOrDefault(option => option.Name == name)?.Label ?? name ?? string.Empty;
+
+    public static string SummaryOf(string? name) =>
+        All.FirstOrDefault(option => option.Name == name)?.Summary ?? string.Empty;
+}

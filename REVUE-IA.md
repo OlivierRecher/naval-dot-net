@@ -9,7 +9,7 @@ en défaut, ce qui a réellement été observé, et ce qui reste non vérifié.
 
 Binôme : Olivier Recher (@OlivierRecher) · Ulysse (@Oulssyyy)
 
-**État : 3 revues sur 3.**
+**État : 4 revues — 2 adaptées, 1 correctif rejeté, 1 conclusion invalidée.**
 
 ---
 
@@ -338,3 +338,200 @@ pose se relit comme une garantie.
 Le contrôle qui manquait était trivial à écrire et n'existait pas, parce que la
 suite de tests raisonnait en tours successifs — jamais en appels simultanés.
 
+---
+
+## Revue 4 — Un écart de 1,3 tir mesuré sur 500 parties est-il un écart ?
+
+**Proposition examinée**
+
+Pendant l'item 2, l'IA a mesuré le coût de deux raffinements de l'algorithme
+`HuntTarget` en les désactivant tour à tour, puis a conclu :
+
+> Désactiver la résolution des navires coulés rend `HuntTarget` **meilleur**
+> (64,6 tirs contre 65,8) et `HuntTargetParity` **pire** (60,3 contre 59,4).
+> Mesuré sur 500 parties appariées.
+
+⚠️ **Le nombre 64,6 apparaît deux fois dans ce dépôt pour deux choses
+différentes.** Ci-dessus, c'est `HuntTarget` **sans** résolution, sur 500
+parties. Dans l'ADR 0009 et dans `PROMPTS.md`, c'est `HuntTarget` **livré**, sur
+100 parties. Les deux valeurs sont justes ; leur rapprochement est une
+coïncidence d'arrondi. Table de référence complète plus bas.
+
+Et l'explication avancée dans la foulée : *les navires se regroupent sur une
+grille 10 × 10, donc continuer à sonder autour d'un impact reste du bon terrain.*
+
+La proposition a deux parties, et c'est leur écart qui fait l'objet de la revue :
+un **chiffre** présenté comme un fait, et une **explication** qui n'en couvre que
+la moitié. L'explication prédit le même signe pour les deux difficultés — la
+parité ne change pas la façon dont les navires sont placés. Or les signes
+observés étaient opposés.
+
+**Hypothèse à vérifier**
+
+> L'écart de 1,3 tir observé entre la variante livrée et la variante sans
+> résolution est un écart réel, et non une fluctuation de l'échantillon.
+
+Le point aveugle était nommé : la mesure rapportait deux moyennes et **aucune
+dispersion**. Le nombre de tirs pour vider une flotte standard varie fortement
+d'une partie à l'autre — écart type de l'ordre de 10 tirs. Avec 500 parties,
+l'erreur type d'une moyenne est déjà d'environ 0,45 tir ; celle d'une
+**différence** dépend de la corrélation entre les deux variantes et n'avait pas
+été calculée du tout.
+
+**Expérience**
+
+Reprendre les deux variantes en enregistrant le nombre de tirs **partie par
+partie**, pas seulement la moyenne, sur les mêmes graines de placement. Calculer
+la moyenne des différences appariées et son erreur type. Répéter à 1 000 puis à
+4 000 parties.
+
+Résultat attendu, écrit avant exécution : si les écarts sont réels, le rapport
+différence / erreur type croît comme la racine de l'échantillon et les signes
+restent stables. S'ils sont du bruit, le rapport stagne autour de 1 et une
+estimation peut changer de valeur, voire de signe.
+
+Erreur que ce contrôle peut détecter : une conclusion tirée d'un écart plus petit
+que la précision de la mesure qui l'a produit.
+
+**Observation**
+
+| Échantillon | Raffinement désactivé | Difficulté | Différence appariée | Erreur type | Rapport |
+|---|---|---|---|---|---|
+| 1 000 | résolution des coulés | `HuntTarget` | −1,32 | 0,69 | −1,9 |
+| 1 000 | résolution des coulés | `HuntTargetParity` | **+1,32** | 0,61 | 2,2 |
+| 1 000 | préférence d'alignement | `HuntTarget` | +1,85 | 0,64 | 2,9 |
+| 1 000 | préférence d'alignement | `HuntTargetParity` | +1,83 | 0,51 | 3,6 |
+| 4 000 | résolution des coulés | `HuntTarget` | −1,31 | 0,35 | −3,7 |
+| 4 000 | résolution des coulés | `HuntTargetParity` | **+0,55** | 0,31 | 1,8 |
+| 4 000 | préférence d'alignement | `HuntTarget` | +1,50 | 0,33 | 4,6 |
+| 4 000 | préférence d'alignement | `HuntTargetParity` | +2,13 | 0,25 | 8,6 |
+
+Trois choses apparaissent.
+
+1. **La préférence d'alignement est établie** aux deux difficultés, et elle se
+   renforce avec l'échantillon : c'est la signature d'un effet réel.
+2. **Le coût de la résolution sur `HuntTarget` est établi** : −1,31 tir, stable
+   de 1 000 à 4 000 parties. Le raffinement livré rend bel et bien ce niveau
+   moins efficace.
+3. **Le bénéfice de la résolution sur `HuntTargetParity` n'existe pas.**
+   L'estimation passe de +1,32 à +0,55 en quadruplant l'échantillon, et le
+   rapport reste sous 2. Le chiffre initial était du bruit.
+
+C'est exactement le point du contradicteur : l'affirmation « mesuré sur 500
+parties appariées » donnait à une valeur instable l'autorité d'un fait.
+
+**Table de référence — aucune valeur de ce projet ne se lit sans sa variante ni
+son échantillon :**
+
+| Variante | Parties | `Random` | `HuntTarget` | `HuntTargetParity` |
+|---|---|---|---|---|
+| **livrée** | 100 | 95,3 | **64,6** | 58,7 |
+| livrée | 500 | — | 65,8 | 59,4 |
+| livrée | 4 000 | — | 65,9 | 59,5 |
+| sans résolution | 500 | — | **64,6** | 60,3 |
+| sans résolution | 4 000 | — | 64,6 | 60,1 |
+| sans alignement | 4 000 | — | 67,4 | 61,7 |
+
+La variante livrée passe elle-même de 64,6 à 65,9 entre 100 et 4 000 parties :
+la mesure a une précision d'environ ±1 tir à 100 parties, et les valeurs du
+tableau de l'ADR ne sont pas significatives à la décimale.
+
+Ce qui rend le **classement** robuste malgré cela, c'est l'ordre de grandeur des
+écarts : 30 tirs entre `Random` et `HuntTarget`, 6 entre `HuntTarget` et
+`HuntTargetParity`. Ces écarts-là sont très supérieurs à la précision de
+l'échantillon — d'où des tests d'efficacité fiables sur le classement, et
+incapables de trancher une comparaison de variantes.
+
+**L'explication était fausse aussi, et une mesure la remplace.** Plutôt que
+d'invoquer la répartition des navires, la part de tirs joués en chasse a été
+comptée :
+
+| Variante | `HuntTarget` | `HuntTargetParity` |
+|---|---|---|
+| avec résolution | 75 % de chasse | 71 % de chasse |
+| sans résolution | 44 % | 39 % |
+
+La résolution des coulés ne fait pas « gagner des tirs » : elle **rend le bot à
+la chasse**. Sans elle, les cases touchées ne sortent jamais de la liste d'attente
+et le bot reste en traque permanente. Le gain ou la perte dépend alors de ce vers
+quoi il retourne — un tirage uniforme pour `HuntTarget`, qui est moins bon que
+sonder autour d'un impact, un balayage en damier pour `HuntTargetParity`, qui est
+meilleur. Un seul mécanisme, les deux signes.
+
+**Décision et justification**
+
+**Chiffre corrigé, explication remplacée, décision de conception maintenue.**
+
+La résolution des navires coulés est conservée, et la justification change
+complètement. Elle n'est **pas** gardée parce qu'elle ferait gagner des tirs :
+elle en coûte 1,31 sur `HuntTarget` et son bénéfice ailleurs n'est pas établi.
+
+Elle est gardée parce que le critère n'est pas le nombre de tirs, c'est ce que la
+difficulté prétend être. Sans elle, `HuntTargetParity` ne joue plus que 39 % de
+ses tirs en chasse : son damier — sa seule spécificité, ce qui la distingue de
+`HuntTarget` — ne gouverne plus qu'une minorité de ses décisions. Une difficulté
+dont le mécanisme distinctif est inerte les deux tiers du temps n'est pas la
+difficulté annoncée.
+
+Ce que la variante sans résolution décrit, en revanche, est un **autre
+algorithme** : un bot qui exploite sans le savoir le regroupement des navires.
+C'est une difficulté possible pour plus tard, pas une raison de laisser
+celle-ci mal définie.
+
+**Pourquoi ne pas garder la résolution uniquement là où elle se justifie ?**
+L'objection est réelle : le seul coût établi — 1,31 tir — tombe sur
+`HuntTarget`, et c'est précisément la difficulté où l'argument d'identité est le
+plus faible. Sans résolution, elle chasse encore 44 % du temps et « chasse et
+traque » reste descriptif. La garder seulement pour `HuntTargetParity` ferait
+gagner ce tir.
+
+C'est écarté pour une raison qui n'est pas l'efficacité non plus. `CONTEXT.md`
+définit les deux difficultés comme partageant la même traque et **ne différant
+que par le balayage**. Les faire diverger sur un second point rendrait l'écart
+mesuré entre elles ininterprétable : il additionnerait deux changements, et on
+ne saurait plus dire ce que le damier apporte. L'échelle de difficulté est ce
+que la fonctionnalité livre ; un tir gagné ne paie pas sa lisibilité.
+
+**Preuves et limites**
+
+| | |
+|---|---|
+| Mesures appariées | 4 000 parties, mêmes graines de placement entre variantes |
+| Part de chasse | 1 000 parties, compteurs posés sur les deux phases puis retirés |
+| Décision tracée | ADR 0009, sections « Conséquences » et « Vérification » |
+| Contradiction initiale | Session pair, objection de méthode sur l'absence d'erreur type |
+
+Ce qui **reste non vérifié** :
+
+- Le rapport 1,8 de `HuntTargetParity` sans résolution n'établit **ni** un effet
+  **ni** son absence. Il établit seulement que 4 000 parties ne suffisent pas à
+  le trancher. L'écart, s'il existe, est inférieur à l'ordre de grandeur mesuré.
+- Les erreurs types supposent des parties indépendantes. Les graines sont
+  distinctes mais issues du même générateur ; aucun contrôle n'a été fait sur
+  l'indépendance réelle des placements produits.
+- Ces mesures sont **hors suite de tests**. Elles ont été obtenues en modifiant
+  le code puis en le rétablissant ; elles ne sont pas rejouées à chaque
+  `dotnet test`, qui ne vérifie que le classement des trois difficultés avec des
+  bornes larges. Une dégradation de 1,3 tir passerait inaperçue en CI.
+- La part de chasse a été mesurée avec des compteurs ajoutés au domaine pour
+  l'occasion, **absents du code livré**. Le chiffre n'est pas reproductible en
+  l'état par un lecteur : il faut reposer les sondes.
+
+**Ce que cette revue enseigne pour la suite du projet**
+
+Une mesure produite par l'IA porte la même assurance qu'une affirmation produite
+par l'IA, et le chiffre la fait paraître plus solide encore. « 64,6 contre
+65,8 sur 500 parties » se lit comme un fait ; c'était une différence de 1,3 avec
+une précision de 0,7, c'est-à-dire presque rien.
+
+La règle retenue : **un écart entre deux mesures ne vaut que rapporté à la
+précision de la mesure.** Une moyenne sans dispersion n'est pas un résultat, et
+le réflexe d'augmenter l'échantillon quand le rapport stagne doit précéder la
+conclusion, pas la suivre.
+
+Deuxième enseignement, plus inattendu : **l'explication d'un résultat est une
+proposition à vérifier au même titre que le résultat.** Celle avancée ici était
+plausible, cohérente avec le domaine, et fausse — elle ne rendait compte que
+d'un des deux signes observés. C'est ce défaut de couverture, pas le chiffre, qui
+a mis sur la piste. Une explication qui n'explique que la moitié de ce qu'on
+observe signale toujours quelque chose.

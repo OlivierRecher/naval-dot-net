@@ -38,7 +38,7 @@ public static class GameEndpoints
         {
             var human = new Player(request.PlayerName, isBot: false, placer.Place(size, FleetTemplate.Standard));
             var bot = new Player("Bot", isBot: true, placer.Place(size, FleetTemplate.Standard));
-            var game = new Game(GameMode.Solo, human, bot);
+            var game = new Game(GameMode.Solo, human, bot, BotDifficulties.Parse(request.BotDifficulty));
 
             repository.Add(game);
 
@@ -69,14 +69,14 @@ public static class GameEndpoints
             : TypedResults.Ok(outcome.ToResponse(game));
     }
 
-    private static IResult PlayBotTurn(Guid id, IGameRepository repository, IBotStrategy strategy)
+    private static IResult PlayBotTurn(Guid id, IGameRepository repository, IBotStrategyFactory strategies)
     {
         if (repository.Find(id) is not { } game)
         {
             return TypedResults.NotFound();
         }
 
-        var outcome = game.PlayBotTurn(strategy);
+        var outcome = game.PlayBotTurn(strategies.For(game.BotDifficulty));
 
         return outcome.Rejection is { } rejection
             ? Refused(rejection)
