@@ -14,7 +14,7 @@ TP noté du cours C# / ASP.NET — Christophe MOMMER, HTS Learning.
 
 | | |
 |---|---|
-| **SDK .NET 10** | Version `10.0.400`, épinglée par [`global.json`](./global.json). `dotnet --version` doit répondre `10.0.400` ou une révision supérieure de la même bande. |
+| **SDK .NET 10** | [`global.json`](./global.json) demande `10.0.400` avec `rollForward: latestFeature` : tout SDK .NET 10 de version **égale ou supérieure** convient, y compris une bande de fonctionnalités plus récente. `dotnet --version` doit répondre `10.x`. |
 | **Certificat HTTPS de développement** | Obligatoire : sans lui le navigateur refuse la page. Voir ci-dessous. |
 | **Un navigateur** | L'interface est du WebAssembly ; tout navigateur récent convient. |
 
@@ -79,18 +79,18 @@ en pointant au préalable `BattleShip.App/wwwroot/appsettings.json` sur
 `http://localhost:5166`. L'origine `http://localhost:5019` est déjà autorisée par
 la politique CORS de l'API.
 
-### Si le port de l'API change
+### Si un port change
 
-Le front lit l'adresse de l'API dans
-[`BattleShip.App/wwwroot/appsettings.json`](./BattleShip.App/wwwroot/appsettings.json) :
+Deux réglages distincts, à ne pas confondre — le CORS valide l'origine du
+**front**, pas le port de l'API.
 
-```json
-{ "ApiBaseAddress": "https://localhost:7027" }
-```
+| Ce qui change | Ce qu'il faut modifier |
+|---|---|
+| Le port de l'**API** | `ApiBaseAddress` dans [`BattleShip.App/wwwroot/appsettings.json`](./BattleShip.App/wwwroot/appsettings.json) |
+| Le port ou le schéma du **front** | `Cors:AllowedOrigins` dans la configuration de l'API |
 
-Changer ce port impose d'ajouter l'origine correspondante à la politique CORS de
-l'API — section `Cors:AllowedOrigins` de sa configuration. Sans cela le
-navigateur bloque les appels sans que le serveur ne journalise quoi que ce soit.
+Se tromper de côté donne le même symptôme : le navigateur bloque les appels sans
+que le serveur ne journalise quoi que ce soit.
 
 ---
 
@@ -100,12 +100,18 @@ navigateur bloque les appels sans que le serveur ne journalise quoi que ce soit.
 dotnet test
 ```
 
-**192 tests**, tous verts, répartis en tests métier (`BattleShip.Tests/Domain/`)
-et tests d'intégration sur l'API (`BattleShip.Tests/Api/`).
+Tous verts, répartis en tests métier (`BattleShip.Tests/Domain/`) et tests
+d'intégration sur l'API (`BattleShip.Tests/Api/`), ces derniers sur un vrai
+SQLite en mémoire. Le compte exact figure dans la sortie de `dotnet test` ; il
+n'est pas recopié ici, où il se périmerait à chaque item.
 
-Ces tests ne couvrent **ni le front Blazor** — aucun composant n'est instancié —
-ni les mesures de difficulté des bots, qui vivent hors suite. C'est une décision,
-pas un oubli : voir « Limites connues ».
+Ce que ces tests ne couvrent **pas** : le front Blazor, dont aucun composant
+n'est instancié. C'est une décision, pas un oubli — voir « Limites connues ».
+
+Le classement des difficultés de bot, lui, **est** dans la suite
+(`BotDifficultyComparisonTests`, 100 parties par niveau). Ce qui vit hors suite,
+ce sont les campagnes de 4 000 parties qui ont servi à comparer des variantes
+d'un même algorithme — voir `REVUE-IA.md`, revue 4.
 
 En intégration continue, la variable `CI=true` rend les avertissements
 bloquants. Pour reproduire la CI en local :
@@ -129,6 +135,8 @@ CI=true dotnet build && CI=true dotnet test
   sous-marin 3, torpilleur 2 — sur une grille de 8×8 à 20×20.
 - **Multijoueur local (hot-seat)** : deux joueurs sur le même appareil, avec un
   écran de passation qui masque tout entre deux tours.
+- **Historique et statistiques**, page `/historique` : les parties passées, leur
+  issue et le nombre de tirs, plus les compteurs globaux et la précision.
 - **Le serveur est autoritaire.** Le client ne transmet jamais d'identité de
   joueur ; c'est le serveur qui décide quelle vue il accepte de publier. Les
   positions adverses non découvertes ne quittent jamais le serveur.
@@ -156,6 +164,8 @@ GET    /games/{id}            → 200 GameView | 404
 POST   /games/{id}/shots      → 200 ShotOutcome | 400 | 404 | 409
 POST   /games/{id}/bot-turn   → 200 ShotOutcome | 404 | 409
 PUT    /games/{id}/fleet      → 200 GameView | 400 | 404 | 409
+GET    /games?limit=n         → 200 GameSummary[]   (historique)
+GET    /stats                 → 200 Statistics
 ```
 
 Les valeurs nommées — mode, difficulté, placement, type de navire, orientation —
@@ -180,7 +190,7 @@ testée et mergée avant d'attaquer la suivante.
 | 2 | Difficultés de bot — `Random`, `HuntTarget`, `HuntTargetParity` | **Livré** |
 | 3 | Placement manuel de la flotte | **Livré** |
 | 4 | Multijoueur local (hot-seat) | **Livré** |
-| 5 | Persistance, historique, statistiques | À venir |
+| 5 | Persistance, historique, statistiques | **Livré** |
 | 6 | Personnalisation — grille, composition de flotte | À venir |
 
 **Le multijoueur en ligne est hors périmètre**, décision assumée et tracée dans
@@ -192,12 +202,16 @@ binôme ne saurait ni terminer ni défendre.
 
 ## Limites connues
 
-- **Les parties sont perdues au redémarrage du serveur.** Le stockage est en
-  mémoire derrière `IGameRepository` ; la bascule vers une base est l'item 5 du
-  backlog. Voir l'[ADR 0004](./docs/adr/0004-igamerepository-en-memoire.md).
-- **Un seul processus.** L'agrégat `Game` est protégé par un verrou par partie,
-  qui ne couvre pas plusieurs instances de l'API. Voir
-  l'[ADR 0008](./docs/adr/0008-verrou-par-partie-sur-l-agregat.md).
+- **Les parties survivent au redémarrage**, depuis l'item 5 : SQLite conserve les
+  placements et le journal, tout le reste est rejoué. Voir
+  l'[ADR 0012](./docs/adr/0012-persistance-par-rejeu-du-journal.md).
+- **Un seul processus.** Le cache des parties vivantes et le verrou de l'agrégat
+  ne couvrent qu'une instance de l'API. Deux instances sur la même base
+  joueraient chacune sur sa copie.
+- **Le dépôt est synchrone**, donc les entrées/sorties SQLite bloquent un fil du
+  pool. Sans conséquence à cette échelle ; premier point à reprendre autrement.
+  Voir l'[ADR 0008](./docs/adr/0008-verrou-par-partie-sur-l-agregat.md) et
+  l'[ADR 0012](./docs/adr/0012-persistance-par-rejeu-du-journal.md).
 - **L'erreur gRPC-Web attendue n'est pas déclenchable depuis l'interface** :
   l'écran désactive les cases déjà visées, donc le `FailedPrecondition` ne se
   démontre que par les tests d'intégration
