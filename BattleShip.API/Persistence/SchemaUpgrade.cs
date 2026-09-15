@@ -12,20 +12,25 @@ namespace BattleShip.API.Persistence;
 /// </summary>
 public static class SchemaUpgrade
 {
-    private static readonly (string Table, string Column, string Definition)[] AddedColumns =
+    /// <summary>
+    /// L'instruction est écrite en toutes lettres, jamais composée : un nom de
+    /// table ou de colonne ne se paramètre pas en SQL, donc la seule façon de ne
+    /// pas fabriquer de requête à la volée est de ne pas la fabriquer du tout.
+    /// </summary>
+    private static readonly (string Table, string Column, string Sql)[] AddedColumns =
     [
-        ("Games", "Fleet", "TEXT NOT NULL DEFAULT ''")
+        ("Games", "Fleet", """ALTER TABLE "Games" ADD COLUMN "Fleet" TEXT NOT NULL DEFAULT ''""")
     ];
 
     public static void Apply(BattleShipDbContext db)
     {
         db.Database.EnsureCreated();
 
-        foreach (var (table, column, definition) in AddedColumns)
+        foreach (var (table, column, sql) in AddedColumns)
         {
             if (!HasColumn(db, table, column))
             {
-                db.Database.ExecuteSqlRaw($"ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {definition};");
+                db.Database.ExecuteSqlRaw(sql);
             }
         }
     }
