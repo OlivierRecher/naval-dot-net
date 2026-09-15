@@ -36,6 +36,8 @@ public sealed class BattleGrpcService(IGameRepository repository) : Battle.Battl
             throw new RpcException(Refused(rejection));
         }
 
+        repository.Save(game);
+
         return Task.FromResult(new ShotOutcome
         {
             Column = outcome.Target.Column,

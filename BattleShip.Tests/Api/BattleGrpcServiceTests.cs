@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace BattleShip.Tests.Api;
 
-public class BattleGrpcServiceTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public class BattleGrpcServiceTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
     /// <summary>
     /// TestServer ne renseigne pas la version de reponse attendue par le client

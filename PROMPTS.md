@@ -629,3 +629,71 @@ justification erronée — donc une ligne d'ADR indéfendable à l'oral. Le déf
 méritait d'être vérifié dans le domaine, pas seulement dans le fichier signalé.
 
 **Commits** : branche `feat/hot-seat`, PR #6.
+
+---
+
+## 2026-09-15 — Persistance SQLite, historique et statistiques
+
+**Outil / modèle** : Claude Code (Opus 5)
+
+**Contexte**
+Item 5 du backlog. Le premier à mettre à l'épreuve une promesse écrite au socle :
+l'ADR 0004 annonçait que la bascule vers SQLite « ne toucherait aucun endpoint ».
+
+Le risque identifié n'était pas d'échouer à écrire du EF Core, mais de persister
+**trop** : `Game` porte deux grilles, des impacts, des navires coulés, un tour,
+un statut, un vainqueur. Tout mapper aurait produit un schéma large dont chaque
+colonne dérivée peut diverger de ce dont elle dérive.
+
+**Prompt**
+Livrer la persistance derrière `IGameRepository`, plus l'historique et les
+statistiques. Décider d'abord **ce qui mérite d'être écrit**, en tenant compte de
+ce que l'ADR 0002 annonçait à propos du journal en ajout seul. Puis compter
+précisément ce que la bascule change, pour vérifier ou réfuter l'ADR 0004.
+
+**Réponse résumée**
+
+| Sujet | Décision |
+|---|---|
+| Ce qui est écrit | Les **placements** et le **journal ordonné**. Rien de dérivable |
+| Ce qui est rejoué | Impacts, navires coulés, tirs reçus, tour courant, statut, vainqueur |
+| Exception | Le **résultat** de chaque tir, dérivable mais stocké — pour les statistiques en SQL. Un test interdit qu'il diverge |
+| Instances | Un cache Singleton publie une partie et une seule, sinon le verrou de l'ADR 0008 ne sérialise plus rien |
+| Asynchronisme | `IGameRepository` reste **synchrone** : le rendre `async` aurait rendu chaque endpoint `async` |
+| Historique | `IGameHistory`, séparée : elle interroge des colonnes, elle ne rejoue rien |
+
+**Décision** : acceptée. La promesse de l'ADR 0004 est **partiellement réfutée** —
+voir `REVUE-IA.md`, revue 8.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 217 tests, 0 échec (195 avant l'item) |
+| Tests d'API | Sur un **vrai SQLite en mémoire**, un par classe : schéma, contraintes et SQL réellement exercés |
+| Survie au redémarrage | Dépôt et cache neufs sur la même base : mêmes tirs, même vue, même flotte |
+| Mutation sans `Save` | Le tir existe en mémoire, pas en base — c'est ce test qui donne son sens au point de validation |
+| `ORDER BY` sur `DateTimeOffset` | **Refusé par SQLite** — découvert par exécution, pas par lecture. Dates stockées en ticks UTC |
+| 7 mutations | **3 survivantes au premier passage**, toutes corrigées par des tests, aucune par du code |
+| Parcours navigateur | Partie jouée, **API redémarrée**, partie retrouvée intacte ; page d'historique et statistiques |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- Le cache et le verrou ne couvrent **qu'un processus**. Deux instances de l'API
+  sur la même base joueraient chacune sur sa copie. L'ADR 0008 l'annonçait ; cet
+  item le confirme sans le corriger.
+- `Save` n'a **ni transaction explicite ni verrou optimiste**.
+- Le dépôt synchrone bloque un fil du pool sur chaque entrée/sortie. Sans
+  conséquence mesurable ici, premier point à reprendre à une échelle réelle.
+- Aucune migration : le schéma est créé au démarrage. Une évolution de schéma sur
+  une base existante n'est donc pas couverte.
+
+**Constat de méthode**
+Trois des sept mutations ont survécu, et **aucune ne révélait un défaut du
+code** : toutes trois révélaient un test qui ne protégeait rien. L'une d'elles
+— les statistiques ignorant les navires coulés — passait parce que le test
+recalculait l'attendu à partir de la réponse du serveur. C'est exactement le
+défaut de la revue 2, reproduit quatre items plus loin, par la même personne qui
+l'avait écrite.
+
+**Commits** : branche `feat/persistance`, PR #7.

@@ -40,7 +40,7 @@ public sealed class Game
             : GameStatus.InProgress;
     }
 
-    public Guid Id { get; } = Guid.NewGuid();
+    public Guid Id { get; private init; } = Guid.NewGuid();
 
     public GameMode Mode { get; }
 
@@ -63,6 +63,35 @@ public sealed class Game
                 return [.. _shots];
             }
         }
+    }
+
+    /// <summary>
+    /// Reconstruit une partie a partir de ce qui a ete persiste : les placements,
+    /// deja poses sur les grilles recues, et le journal ordonne. Tout le reste —
+    /// cases touchees, navires coules, tour courant, statut, vainqueur — est
+    /// rejoue, jamais stocke. C'est ce que l'ADR 0002 annonçait ; l'ADR 0012 en
+    /// fait la strategie de persistance.
+    /// </summary>
+    public static Game Restore(
+        Guid id,
+        GameMode mode,
+        Player first,
+        Player second,
+        BotDifficulty botDifficulty,
+        IReadOnlyList<Coordinates> shots)
+    {
+        var game = new Game(mode, first, second, botDifficulty) { Id = id };
+
+        foreach (var target in shots)
+        {
+            if (!game.Fire(target).IsAccepted)
+            {
+                throw new InvalidOperationException(
+                    $"Journal incoherent : le tir en {target} est refuse au rejeu de la partie {id}.");
+            }
+        }
+
+        return game;
     }
 
     public FireOutcome Fire(Coordinates target)

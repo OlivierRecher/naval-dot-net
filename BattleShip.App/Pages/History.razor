@@ -1,0 +1,103 @@
+@page "/historique"
+@using BattleShip.Models
+@inject HttpClient Http
+
+<PageTitle>Historique — Bataille navale</PageTitle>
+
+<h1 class="mb-3">Historique</h1>
+
+@if (_failure is not null)
+{
+    <div class="alert alert-danger" role="alert">
+        @_failure
+        <button class="btn btn-sm btn-outline-danger ms-2" @onclick="LoadAsync">Réessayer</button>
+    </div>
+}
+else if (_statistics is null)
+{
+    <p>Chargement…</p>
+}
+else
+{
+    <div class="card p-3 mb-4">
+        <h2 class="h5">Statistiques</h2>
+        <dl class="row mb-0">
+            <dt class="col-sm-4">Parties jouées</dt>
+            <dd class="col-sm-8">@_statistics.Games — dont @_statistics.Finished terminée(s)</dd>
+
+            <dt class="col-sm-4">Tirs enregistrés</dt>
+            <dd class="col-sm-8">@_statistics.Shots</dd>
+
+            <dt class="col-sm-4">Touchés / coulés</dt>
+            <dd class="col-sm-8">@_statistics.Hits / @_statistics.Sunk</dd>
+
+            <dt class="col-sm-4">Précision</dt>
+            <dd class="col-sm-8">@_statistics.Accuracy.ToString("P1")</dd>
+        </dl>
+    </div>
+
+    <h2 class="h5">Dernières parties</h2>
+
+    @if (_games.Count is 0)
+    {
+        <p>Aucune partie enregistrée pour l'instant.</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead>
+                    <tr>
+                        <th scope="col">Début</th>
+                        <th scope="col">Mode</th>
+                        <th scope="col">Joueurs</th>
+                        <th scope="col">Tirs</th>
+                        <th scope="col">Issue</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var game in _games)
+                    {
+                        <tr>
+                            <td>@game.StartedAt.ToLocalTime().ToString("dd/MM HH:mm")</td>
+                            <td>@ModeOf(game)</td>
+                            <td>@game.FirstPlayer contre @game.SecondPlayer</td>
+                            <td>@game.Shots</td>
+                            <td>@(game.Winner is null ? "en cours" : $"{game.Winner} l'emporte")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+<a class="btn btn-outline-secondary mt-3" href="">Retour au jeu</a>
+
+@code {
+    private List<GameSummaryResponse> _games = [];
+    private StatisticsResponse? _statistics;
+    private string? _failure;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _failure = null;
+
+        try
+        {
+            _statistics = await Http.GetFromJsonAsync<StatisticsResponse>("stats");
+            _games = await Http.GetFromJsonAsync<List<GameSummaryResponse>>("games?limit=20") ?? [];
+        }
+        catch (HttpRequestException)
+        {
+            _failure = "Le serveur est injoignable. Vérifiez que l'API est démarrée, puis réessayez.";
+        }
+    }
+
+    private static string ModeOf(GameSummaryResponse game) =>
+        game.Mode == "Local"
+            ? "Duel"
+            : $"Solo — {BotDifficultyCatalog.LabelOf(game.BotDifficulty)}";
+}
