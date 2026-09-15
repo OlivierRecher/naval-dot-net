@@ -16,10 +16,24 @@ choses sont représentées ni stockées — uniquement ce que les mots désignen
 | Mode de jeu | `GameMode` | `Solo` (un humain contre un bot) ou `Local` (deux humains sur le même navigateur, en alternance). |
 | Joueur | `Player` | L'un des deux participants. Un joueur est humain ou bot ; les règles ne font aucune différence entre les deux. |
 | Bot | `Bot` | Joueur piloté par le serveur. **Pas** « IA », « ordinateur » ni « adversaire » — ces mots sont ambigus dans un projet où l'IA désigne aussi l'outil de développement. |
-| Difficulté | `BotDifficulty` | `Random`, `HuntTarget`, `HuntTargetParity`. |
+| Difficulté | `BotDifficulty` | `Random`, `HuntTarget` ou `HuntTargetParity`. Fixée à la création de la partie, elle ne change plus. Une partie `Local` en porte une par construction, sans objet : elle n'oppose aucun bot. |
+| Stratégie | `BotStrategy` | Le comportement qui choisit la case visée par un bot. Une difficulté nomme une stratégie ; la fabrique `IBotStrategyFactory` est le seul endroit où le nom rencontre le code. |
 | Joueur courant | `CurrentPlayer` | Le joueur à qui c'est le tour. Seul lui peut tirer. |
 | Tour | `Turn` | Le droit de tirer une fois. Il passe après chaque tir accepté, touché ou non. |
 | Vainqueur | `Winner` | Le joueur dont l'adversaire a perdu toute sa flotte. N'existe que si le statut est `Finished`. |
+
+### Comportement des bots
+
+Ces trois mots ne décrivent pas trois difficultés mais deux phases et un filtre.
+`HuntTarget` et `HuntTargetParity` partagent la traque et ne diffèrent que par le
+balayage.
+
+| Français | Identifiant | Définition |
+|---|---|---|
+| Chasse | `Hunt` | La phase où aucun navire touché n'est en cours de traque : le bot choisit une case parmi celles qu'il n'a pas encore visées. |
+| Traque | `Track` | La phase où au moins une case touchée appartient à un navire encore à flot : le bot ne vise plus que le voisinage de ces cases. |
+| Case en attente | `Pending` | Une case touchée dont le navire n'est pas connu comme coulé. C'est ce qui déclenche la traque ; quand il n'en reste aucune, le bot retourne chasser. |
+| Damier | `ScanLattice` | Le sous-ensemble de cases balayées par `HuntTargetParity` pendant la **chasse** — une case sur deux. Il ne s'applique jamais à la traque, dont les cibles sont toutes de la parité opposée à la case touchée. |
 
 ## Plateau
 
@@ -70,3 +84,5 @@ Ces termes ne doivent apparaître ni dans le code, ni dans les livrables.
 | `Move` | `Shot` | Un tir accepté est le seul coup qui existe ; une tentative refusée n'en est pas un. |
 | `Computer`, `AI` | `Bot` | « IA » désigne l'outil de développement dans ce projet ; le confondre avec l'adversaire rend les livrables illisibles. |
 | `Player1`, `Player2` | `CurrentPlayer` / `Opponent` selon le point de vue | Les numéros de joueur ne sont pas une notion du domaine. |
+| `BotLevel`, `Level`, `Niveau` | `BotDifficulty`, « difficulté » | Un seul mot pour le réglage de l'adversaire. `AGENTS.md` § 10 intitule le backlog « niveaux de bot » : c'est le nom de l'étape, pas celui de la notion. |
+| `Easy`, `Medium`, `Hard` | `Random`, `HuntTarget`, `HuntTargetParity` | Les difficultés sont nommées par l'algorithme qu'elles désignent, pas par une échelle subjective. Les étiquettes « Novice », « Chasseur », « Vétéran » n'existent qu'à l'écran. |

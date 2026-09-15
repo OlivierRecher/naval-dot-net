@@ -1,0 +1,159 @@
+# ADR 0009 : la difficulté est une donnée de la partie, résolue par une fabrique
+
+## Statut et date
+Accepté — 2026-09-15. Rédigé avec l'item 2 du backlog (niveaux de bot).
+
+## Contexte
+Le socle n'offrait qu'un bot, `RandomBot`, enregistré en **Singleton** sous
+`IBotStrategy` et injecté directement dans l'endpoint `/games/{id}/bot-turn` :
+
+```csharp
+builder.Services.AddSingleton<IBotStrategy>(_ => new RandomBot(Random.Shared));
+```
+
+Ce montage ne survit pas à l'arrivée de trois difficultés. Un Singleton unique
+signifie « toutes les parties en cours partagent le même adversaire » : le
+conteneur n'a aucun moyen de savoir laquelle des parties il sert.
+
+Il faut donc décider **où vit la difficulté** et **qui résout le nom en code**.
+
+Contrainte héritée : `IBotStrategy.ChooseTarget` ne reçoit qu'une `GameView`,
+c'est-à-dire exactement ce qu'un humain voit. Aucune difficulté ne peut être
+obtenue en donnant plus d'information au bot — seulement en exploitant mieux
+celle qu'il a. C'est ce qui rend les trois niveaux comparables.
+
+## Options envisagées
+
+**(a) Le client transmet la difficulté à chaque tour de bot.** L'endpoint
+resterait sans état. Écarté sans hésiter : `AGENTS.md` § 4 pose que le serveur
+est autoritaire et que le client n'est jamais cru. Un client pourrait demander
+`HuntTargetParity` à la création pour l'affichage, puis `Random` à chaque tour.
+La difficulté deviendrait décorative.
+
+**(b) Le dépôt stocke la stratégie à côté de la partie.** `IGameRepository`
+rendrait un couple `(Game, IBotStrategy)`. Écarté : cela fait porter au stockage
+une notion qui n'en relève pas, et complique la bascule vers SQLite (ADR 0004) —
+on ne persiste pas un objet de comportement, on persiste un nom.
+
+**(c) La partie porte sa difficulté ; une fabrique la résout en stratégie.**
+`Game` gagne une propriété `BotDifficulty` fixée à la construction. Une
+`IBotStrategyFactory` en Singleton traduit ce nom en `IBotStrategy` au moment du
+tour de bot.
+
+## Décision
+Option **(c)**.
+
+```csharp
+builder.Services.AddSingleton<IBotStrategyFactory>(_ => new BotStrategyFactory(Random.Shared));
+// ...
+var outcome = game.PlayBotTurn(strategies.For(game.BotDifficulty));
+```
+
+Trois points la justifient.
+
+1. **La difficulté est un attribut de l'affrontement**, au même titre que
+   `GameMode` ou `BoardSize`. Elle est choisie une fois, ne change plus, et
+   devra être persistée telle quelle le jour de SQLite.
+2. **La fabrique est le seul endroit où le nom rencontre le code.** `Game` ne
+   connaît aucune implémentation de `IBotStrategy` ; il en reçoit une. La règle
+   « `Domain` ne référence rien » (`AGENTS.md` § 4) reste tenue, la fabrique
+   vivant elle aussi dans `Domain`.
+3. **Le Singleton reste légitime** parce que les stratégies sont des fonctions
+   pures de la `GameView` : aucune ne retient d'état entre deux tours. C'est une
+   conséquence directe de la contrainte héritée, et c'est ce qui autorise une
+   seule fabrique pour toutes les parties simultanées.
+
+### Le nom voyage en texte, pas en énumération
+`CreateGameRequest.BotDifficulty` est un `string`, pas l'énumération.
+
+Une énumération dans le DTO ferait échouer la **désérialisation** sur une valeur
+inconnue, avant que le filtre de validation (ADR 0006) ait pu s'exécuter : le
+client recevrait une erreur de format au lieu du `ValidationProblem` uniforme que
+l'ADR 0006 promet. Avec un `string`, la liaison réussit toujours et c'est
+FluentValidation qui refuse.
+
+La validation compare le nom à `BotDifficulties.Names`. Elle **n'utilise pas**
+`Enum.TryParse`, vérifié par exécution :
+
+```
+TryParse("42") = True  -> 42     IsDefined=False
+TryParse("0")  = True  -> Random IsDefined=True
+```
+
+`Enum.TryParse` accepte la valeur numérique sous-jacente, y compris hors
+énumération ; `Enum.IsDefined` rattrape `"42"` mais pas `"0"`. Le contrat exposé
+est la liste des noms, pas la représentation entière.
+
+## Conséquences
+- `Game` gagne un paramètre optionnel `BotDifficulty botDifficulty =
+  BotDifficulty.Random`. Optionnel **parce qu'une partie `Local` n'oppose aucun
+  bot** : exiger un niveau y reviendrait à inventer une donnée sans objet.
+- La difficulté est publiée dans `GameView` puis dans `GameViewResponse` : le
+  joueur voit à l'écran ce qu'il affronte. Aucune information secrète n'y
+  transite.
+- Le catalogue des libellés (`BotDifficultyCatalog`) vit dans `BattleShip.Models`
+  et non dans `Domain` : c'est le front qui les affiche, et `App` ne référence
+  jamais `Domain`. Un test interdit qu'il diverge de l'énumération.
+- **Limite assumée — le damier suppose un navire de deux cases minimum.** Le
+  balayage d'une case sur deux de `HuntTargetParity` ne peut rien manquer tant
+  que le plus petit navire occupe deux cases adjacentes. Le jour où la flotte
+  devient personnalisable (item 6), un navire d'une seule case rendrait ce niveau
+  incorrect, pas seulement moins bon.
+- **Limite assumée — la résolution des navires coulés est approchée.** Le bot
+  déduit qu'une case touchée appartient à un navire coulé si elle est alignée
+  avec une case `Sunk`, sans case intacte entre les deux. Le contact entre
+  navires étant autorisé (`AGENTS.md` § 3), deux navires alignés et mitoyens se
+  confondent : le bot retourne chasser trop tôt. Il perd de l'efficacité, il ne
+  tire jamais un coup interdit.
+- **Compromis délibéré — la résolution coûte des tirs et on la garde quand
+  même.** Mesurée, elle dégrade `HuntTarget` de 1,31 tir. Elle est conservée
+  parce que le critère n'est pas le nombre de tirs mais ce que la difficulté
+  prétend faire : sans elle, la part de tirs joués en chasse tombe de 71 % à
+  39 % pour `HuntTargetParity`, donc son damier — sa seule spécificité — ne
+  gouverne plus qu'une minorité de ses décisions. Voir `REVUE-IA.md`, revue 4.
+
+## Vérification et réexamen
+
+Banc de mesure `BotDrill` : une stratégie tire sur une grille jusqu'à couler la
+flotte, sans passer par `Game`. Moyennes sur 100 parties appariées (mêmes graines
+de placement pour les trois difficultés) — c'est le chiffre que les tests
+vérifient à chaque exécution.
+
+| Difficulté | Tirs moyens |
+|---|---|
+| `Random` | 95,3 |
+| `HuntTarget` | 64,6 |
+| `HuntTargetParity` | 58,7 |
+
+Les trois se classent, ce qui est la seule chose qui donne un sens au mot
+« difficulté ». Les bornes des tests sont larges et arrondies vers l'extérieur :
+elles interdisent qu'un niveau dérive au point de se confondre avec un autre,
+elles ne pincent pas une valeur.
+
+Les écarts **entre variantes d'un même algorithme** sont d'un autre ordre de
+grandeur — environ 1 à 2 tirs, pour un écart-type par partie proche de 10. Ils
+ont été établis hors suite de tests, sur 4 000 parties appariées, avec l'erreur
+type des différences. Voir `REVUE-IA.md`, revue 4 : à 500 parties, deux de ces
+écarts étaient indiscernables du bruit et l'un d'eux a changé de conclusion en
+augmentant l'échantillon.
+
+Contrôles de mutation exécutés, chacun rétabli ensuite :
+
+| Règle cassée | Tests au rouge |
+|---|---|
+| Résolution des navires coulés désactivée | 2 / 7 |
+| Toute case touchée réputée coulée | 3 / 7 domaine, 4 / 5 comparaison |
+| Préférence d'alignement retirée | 1 / 7 |
+| Damier appliqué aussi à la traque | 1 / 3 |
+| Damier retiré du niveau `Parity` | 1 / 3 domaine, 1 / 5 comparaison |
+| L'endpoint ignore `game.BotDifficulty` | 1 / 6 |
+| Validation par `Enum.TryParse` | 1 / 18 |
+| Catalogue partagé désynchronisé | 1 / 6 |
+
+À réexaminer le jour de l'item 6 (flotte personnalisable), qui peut invalider le
+damier, et le jour de SQLite (item 5), où la difficulté devra être persistée.
+
+## Références
+- ADR 0003 (serveur autoritaire), ADR 0004 (`IGameRepository`), ADR 0006 (validation par filtre)
+- `AGENTS.md` § 4, § 10 item 2 · `CONTEXT.md`, section « Comportement des bots »
+- `REVUE-IA.md`, revue 4

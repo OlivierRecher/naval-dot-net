@@ -178,3 +178,91 @@ défaut. Le trou était dans le plan de test avant d'être dans le code : une su
 verte ne dit rien des scénarios qu'elle n'instancie pas.
 
 **Commits** : `cd4c4dd` (code et tests), PR #1.
+
+---
+
+## 2026-09-15 — Niveaux de bot : trois difficultés, et la preuve qu'elles se classent
+
+**Outil / modèle** : Claude Code (Opus 5)
+
+**Contexte**
+Item 2 du backlog. Le socle ne connaissait qu'un `RandomBot`, enregistré en
+Singleton sous `IBotStrategy` et injecté tel quel dans `/games/{id}/bot-turn`.
+Ce montage ne survit pas à trois difficultés : un Singleton unique signifie que
+toutes les parties en cours partagent le même adversaire.
+
+Le risque identifié n'était pas d'écrire trois algorithmes — c'est de la
+littérature, la bataille navale est un problème résolu. Il était de livrer trois
+classes différentes dont **rien n'établirait qu'elles sont d'inégale force**.
+Une hiérarchie de difficulté qu'aucune mesure n'appuie est une étiquette, pas une
+fonctionnalité, et le support sanctionne ce qui est livré sans être vérifié.
+
+**Prompt**
+Implémenter les trois difficultés `Random`, `HuntTarget` et `HuntTargetParity` en
+TDD sur le domaine. Poser d'abord la question de mesure : par quel indicateur
+vérifie-t-on qu'une difficulté est réellement supérieure à une autre, et quel
+test échoue si elle cesse de l'être ? Décider ensuite où vit la difficulté et qui
+la résout en stratégie. Vérifier par exécution, pas de mémoire, tout ce qui
+touche au comportement des API .NET.
+
+**Réponse résumée**
+
+L'indicateur retenu est le **nombre de tirs nécessaires pour couler une flotte
+complète**, mesuré par un banc `BotDrill` qui fait tirer une stratégie sur une
+grille sans passer par `Game` — donc sans l'alternance des tours ni la course
+entre les deux joueurs, qui brouilleraient la mesure.
+
+| Difficulté | Tirs moyens (100 parties appariées) |
+|---|---|
+| `Random` | 95,3 |
+| `HuntTarget` | 64,6 |
+| `HuntTargetParity` | 58,7 |
+
+Décisions structurantes, toutes tracées dans l'ADR 0009 :
+
+| Sujet | Décision |
+|---|---|
+| Où vit la difficulté | Sur `Game`, fixée à la création — pas dans le dépôt, pas transmise par le client |
+| Qui la résout | `IBotStrategyFactory`, Singleton ; légitime car les stratégies sont des fonctions pures de la `GameView` |
+| Type dans le DTO | `string`, pas l'énumération — sinon la désérialisation échoue avant le filtre de validation (ADR 0006) |
+| Validation | Comparaison à la liste des noms, **pas** `Enum.TryParse` |
+| Catalogue des libellés | Dans `Models`, avec un test qui interdit la divergence avec l'énumération du domaine |
+
+**Décision** : acceptée, après deux corrections en cours de route.
+
+1. **Dérive de vocabulaire.** Le code a été écrit `BotLevel` alors que
+   `CONTEXT.md` fixe `BotDifficulty`. `CLAUDE.md` demande explicitement de lire
+   le glossaire *avant* d'écrire du code ; ça n'a pas été fait. Renommé partout,
+   et `CONTEXT.md` a gagné les trois termes que l'implémentation a créés —
+   chasse, traque, damier — plus deux lignes de « mots écartés ». Le filtre de
+   balayage a été renommé `IsOnScanLattice` pour porter le nom du glossaire.
+2. **Une conclusion plus large que la mesure.** Voir `REVUE-IA.md`, revue 4.
+
+**Vérification**
+
+| Contrôle | Résultat |
+|---|---|
+| `dotnet build` puis `dotnet test` | 130 tests, 0 échec (87 avant la feature) |
+| Comportement de `Enum.TryParse` sur une valeur hors énumération | `dotnet run --file` : `TryParse("42")` → **True**, `IsDefined` → False ; `TryParse("0")` → Random |
+| 8 mutations, chacune rétablie | Chacune met au moins un test au rouge — table détaillée dans l'ADR 0009 |
+| Écarts entre variantes d'un même algorithme | 4 000 parties appariées, erreur type des différences — voir revue 4 |
+| Partie complète contre chaque difficulté | `ASoloGame_AgainstEveryDifficulty_RunsToAWinner`, 3 cas |
+| Le niveau choisi pilote réellement le tour du bot | Fabrique espionne substituée dans l'hôte de test |
+| Parcours navigateur complet | Préflight CORS 204 → `POST /battleship.Battle/Fire` 200 en gRPC-Web, puis `/bot-turn` et `GET /games/{id}` en HTTP/JSON |
+| Traque observée à l'écran | Le bot `Vétéran` coule un `Battleship` par 4 tirs verticalement consécutifs, puis tire en **J10** — il retourne chasser dès le navire résolu, et J10 est sur le damier : (9 + 9) % 2 = 0 |
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+
+- Le damier de `HuntTargetParity` ne peut rien manquer **tant que le plus petit
+  navire occupe deux cases**. Aucun test ne protège cette hypothèse : elle
+  tombera avec la flotte personnalisable (item 6), et le niveau deviendra alors
+  incorrect, pas seulement moins bon.
+- La résolution des navires coulés est **approchée** : le contact entre navires
+  étant autorisé, deux navires alignés et mitoyens se confondent. Aucun test ne
+  construit ce cas — il est décrit, pas couvert.
+- Les bornes d'efficacité sont larges (±10 tirs). Elles détectent l'effondrement
+  d'une difficulté, pas sa dégradation lente.
+- Le sélecteur de difficulté côté Blazor n'a **aucun test automatisé**, comme le
+  reste du front : vérifié à la main dans le navigateur.
+
+**Commits** : branche `feat/difficultes-de-bot`, PR #4.

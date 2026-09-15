@@ -13,7 +13,7 @@ builder.Services.AddGrpc(options => options.Interceptors.Add<ValidationIntercept
 builder.Services.AddProblemDetails();
 
 builder.Services.AddSingleton<IGameRepository, InMemoryGameRepository>();
-builder.Services.AddSingleton<IBotStrategy>(_ => new RandomBot(Random.Shared));
+builder.Services.AddSingleton<IBotStrategyFactory>(_ => new BotStrategyFactory(Random.Shared));
 builder.Services.AddSingleton(_ => new RandomFleetPlacer(Random.Shared));
 builder.Services.AddValidatorsFromAssemblyContaining<CreateGameRequestValidator>();
 

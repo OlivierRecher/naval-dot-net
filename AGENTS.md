@@ -107,7 +107,7 @@ est à rejeter.
 ## 5. Contrat d'API
 
 ```
-POST   /games                 → 201 GameCreated
+POST   /games                 → 201 GameCreated   (dont botDifficulty)
 GET    /games/{id}            → 200 GameView | 404
 POST   /games/{id}/shots      → 200 ShotOutcome | 400 | 404 | 409
 POST   /games/{id}/bot-turn   → 200 ShotOutcome | 404 | 409
@@ -120,6 +120,10 @@ PUT    /games/{id}/fleet      → 200 | 400 | 409        (placement manuel)
 - **400** : entrée malformée ou hors grille (produit par FluentValidation).
 - **409** : conflit avec l'état courant — case déjà visée, pas son tour, partie terminée.
 - **404** : partie inconnue.
+- `POST /games` reçoit la **difficulté du bot** sous forme de **nom** —
+  `Random`, `HuntTarget` ou `HuntTargetParity`. Un `string` et non
+  l'énumération : une valeur inconnue doit produire un 400 de FluentValidation,
+  pas une erreur de désérialisation en amont du filtre. Voir ADR 0009.
 
 ### gRPC-Web — opération `Fire`
 
@@ -213,7 +217,7 @@ support est clair : « chaque fonctionnalité livrée doit être intégrée, vé
 et comprise par le binôme. »
 
 1. **Socle** — moteur + API + front + validation + gRPC, partie complète contre un bot aléatoire
-2. **Niveaux de bot** — `Random`, `HuntTarget`, `HuntTargetParity`
+2. ~~**Niveaux de bot** — `Random`, `HuntTarget`, `HuntTargetParity`~~ — livré, ADR 0009
 3. **Placement manuel de la flotte** — le placement aléatoire reste offert
 4. **Multijoueur local (hot-seat)** — écran de passation ; le secret reste garanti côté serveur
 5. **Persistance + historique + statistiques** — SQLite / EF Core derrière `IGameRepository`
@@ -252,6 +256,8 @@ ADR déjà identifiés par le cadrage :
 - `0005` `Fire` en gRPC-Web, reste du contrat en HTTP/JSON
 - `0006` Validation par filtre et intercepteur plutôt qu'appel manuel (écart au support)
 - `0007` Multijoueur local plutôt qu'en ligne
+- `0008` Verrou par partie porté par l'agrégat `Game`
+- `0009` La difficulté du bot est une donnée de la partie, résolue par une fabrique
 
 ### `REVUE-IA.md`
 **Trois revues minimum.** Proposition · hypothèse à vérifier · expérience

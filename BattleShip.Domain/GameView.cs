@@ -25,4 +25,5 @@ public sealed record GameView(
     IReadOnlyList<ShipView> OwnFleet,
     IReadOnlyCollection<Coordinates> ShotsReceived,
     IReadOnlyList<RevealedCell> ShotsFired,
+    BotDifficulty BotDifficulty,
     string? WinnerName);

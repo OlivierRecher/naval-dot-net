@@ -1,3 +1,4 @@
+using BattleShip.Domain;
 using BattleShip.Models;
 using FluentValidation;
 
@@ -19,6 +20,10 @@ public sealed class CreateGameRequestValidator : AbstractValidator<CreateGameReq
 
         RuleFor(request => request.Rows)
             .InclusiveBetween(MinBoardSide, MaxBoardSide);
+
+        RuleFor(request => request.BotDifficulty)
+            .Must(level => BotDifficulties.TryParse(level, out _))
+            .WithMessage($"Niveau de bot inconnu : attendu {string.Join(", ", BotDifficulties.Names)}.");
     }
 }
 

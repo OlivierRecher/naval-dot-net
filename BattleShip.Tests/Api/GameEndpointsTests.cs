@@ -9,7 +9,7 @@ public class GameEndpointsTests(WebApplicationFactory<Program> factory) : IClass
 {
     private readonly HttpClient _client = factory.CreateClient();
 
-    private static CreateGameRequest ValidRequest => new("Olivier", 10, 10);
+    private static CreateGameRequest ValidRequest => new("Olivier", 10, 10, "Random");
 
     private async Task<GameViewResponse> CreateGameAsync()
     {
@@ -33,14 +33,19 @@ public class GameEndpointsTests(WebApplicationFactory<Program> factory) : IClass
     }
 
     [Theory]
-    [InlineData("", 10, 10)]
-    [InlineData("Olivier", 3, 10)]
-    [InlineData("Olivier", 10, 99)]
-    public async Task CreateGame_WithAnInvalidRequest_Returns400(string name, int columns, int rows)
+    [InlineData("", 10, 10, "Random")]
+    [InlineData("Olivier", 3, 10, "Random")]
+    [InlineData("Olivier", 10, 99, "Random")]
+    [InlineData("Olivier", 10, 10, "Expert")]
+    [InlineData("Olivier", 10, 10, "")]
+    // Enum.TryParse accepterait la valeur numerique sous-jacente : la valider
+    // ainsi laisserait passer un niveau qui n'existe pas. Voir BotDifficulties.
+    [InlineData("Olivier", 10, 10, "42")]
+    public async Task CreateGame_WithAnInvalidRequest_Returns400(string name, int columns, int rows, string level)
     {
         // Aucun de ces endpoints n'appelle ValidateAsync : si le filtre generique
         // n'etait pas branche, ces requetes passeraient. Voir ADR 0006.
-        var response = await _client.PostAsJsonAsync("/games", new CreateGameRequest(name, columns, rows));
+        var response = await _client.PostAsJsonAsync("/games", new CreateGameRequest(name, columns, rows, level));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }

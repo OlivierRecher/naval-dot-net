@@ -22,6 +22,7 @@ internal static class GameMapper
             ship.IsSunk))],
         [.. view.ShotsReceived.Select(ToDto)],
         [.. view.ShotsFired.Select(cell => new RevealedCellDto(cell.Target.ToDto(), cell.Result.ToString()))],
+        view.BotDifficulty.ToString(),
         view.WinnerName);
 
     public static ShotOutcomeResponse ToResponse(this FireOutcome outcome, Game game) => new(
