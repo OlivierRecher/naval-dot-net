@@ -212,11 +212,15 @@ complète**, mesuré par un banc `BotDrill` qui fait tirer une stratégie sur un
 grille sans passer par `Game` — donc sans l'alternance des tours ni la course
 entre les deux joueurs, qui brouilleraient la mesure.
 
-| Difficulté | Tirs moyens (100 parties appariées) |
+| Difficulté — **code livré**, 100 parties appariées | Tirs moyens |
 |---|---|
 | `Random` | 95,3 |
 | `HuntTarget` | 64,6 |
 | `HuntTargetParity` | 58,7 |
+
+Précision d'environ ±1 tir : ces valeurs portent le classement, pas la décimale.
+Dans `REVUE-IA.md` revue 4, un 64,6 désigne une **autre** variante mesurée sur un
+**autre** échantillon — la table de référence y lève l'ambiguïté.
 
 Décisions structurantes, toutes tracées dans l'ADR 0009 :
 

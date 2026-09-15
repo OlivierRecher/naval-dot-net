@@ -9,7 +9,7 @@ en défaut, ce qui a réellement été observé, et ce qui reste non vérifié.
 
 Binôme : Olivier Recher (@OlivierRecher) · Ulysse (@Oulssyyy)
 
-**État : 4 revues, dont 2 adaptées et 1 correctif rejeté.**
+**État : 4 revues — 2 adaptées, 1 correctif rejeté, 1 conclusion invalidée.**
 
 ---
 
@@ -351,6 +351,12 @@ Pendant l'item 2, l'IA a mesuré le coût de deux raffinements de l'algorithme
 > (64,6 tirs contre 65,8) et `HuntTargetParity` **pire** (60,3 contre 59,4).
 > Mesuré sur 500 parties appariées.
 
+⚠️ **Le nombre 64,6 apparaît deux fois dans ce dépôt pour deux choses
+différentes.** Ci-dessus, c'est `HuntTarget` **sans** résolution, sur 500
+parties. Dans l'ADR 0009 et dans `PROMPTS.md`, c'est `HuntTarget` **livré**, sur
+100 parties. Les deux valeurs sont justes ; leur rapprochement est une
+coïncidence d'arrondi. Table de référence complète plus bas.
+
 Et l'explication avancée dans la foulée : *les navires se regroupent sur une
 grille 10 × 10, donc continuer à sonder autour d'un impact reste du bon terrain.*
 
@@ -414,6 +420,28 @@ Trois choses apparaissent.
 C'est exactement le point du contradicteur : l'affirmation « mesuré sur 500
 parties appariées » donnait à une valeur instable l'autorité d'un fait.
 
+**Table de référence — aucune valeur de ce projet ne se lit sans sa variante ni
+son échantillon :**
+
+| Variante | Parties | `Random` | `HuntTarget` | `HuntTargetParity` |
+|---|---|---|---|---|
+| **livrée** | 100 | 95,3 | **64,6** | 58,7 |
+| livrée | 500 | — | 65,8 | 59,4 |
+| livrée | 4 000 | — | 65,9 | 59,5 |
+| sans résolution | 500 | — | **64,6** | 60,3 |
+| sans résolution | 4 000 | — | 64,6 | 60,1 |
+| sans alignement | 4 000 | — | 67,4 | 61,7 |
+
+La variante livrée passe elle-même de 64,6 à 65,9 entre 100 et 4 000 parties :
+la mesure a une précision d'environ ±1 tir à 100 parties, et les valeurs du
+tableau de l'ADR ne sont pas significatives à la décimale.
+
+Ce qui rend le **classement** robuste malgré cela, c'est l'ordre de grandeur des
+écarts : 30 tirs entre `Random` et `HuntTarget`, 6 entre `HuntTarget` et
+`HuntTargetParity`. Ces écarts-là sont très supérieurs à la précision de
+l'échantillon — d'où des tests d'efficacité fiables sur le classement, et
+incapables de trancher une comparaison de variantes.
+
 **L'explication était fausse aussi, et une mesure la remplace.** Plutôt que
 d'invoquer la répartition des navires, la part de tirs joués en chasse a été
 comptée :
@@ -449,6 +477,20 @@ Ce que la variante sans résolution décrit, en revanche, est un **autre
 algorithme** : un bot qui exploite sans le savoir le regroupement des navires.
 C'est une difficulté possible pour plus tard, pas une raison de laisser
 celle-ci mal définie.
+
+**Pourquoi ne pas garder la résolution uniquement là où elle se justifie ?**
+L'objection est réelle : le seul coût établi — 1,31 tir — tombe sur
+`HuntTarget`, et c'est précisément la difficulté où l'argument d'identité est le
+plus faible. Sans résolution, elle chasse encore 44 % du temps et « chasse et
+traque » reste descriptif. La garder seulement pour `HuntTargetParity` ferait
+gagner ce tir.
+
+C'est écarté pour une raison qui n'est pas l'efficacité non plus. `CONTEXT.md`
+définit les deux difficultés comme partageant la même traque et **ne différant
+que par le balayage**. Les faire diverger sur un second point rendrait l'écart
+mesuré entre elles ininterprétable : il additionnerait deux changements, et on
+ne saurait plus dire ce que le damier apporte. L'échelle de difficulté est ce
+que la fonctionnalité livre ; un tir gagné ne paie pas sa lisibilité.
 
 **Preuves et limites**
 

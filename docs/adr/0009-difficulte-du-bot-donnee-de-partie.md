@@ -110,7 +110,15 @@ est la liste des noms, pas la représentation entière.
   parce que le critère n'est pas le nombre de tirs mais ce que la difficulté
   prétend faire : sans elle, la part de tirs joués en chasse tombe de 71 % à
   39 % pour `HuntTargetParity`, donc son damier — sa seule spécificité — ne
-  gouverne plus qu'une minorité de ses décisions. Voir `REVUE-IA.md`, revue 4.
+  gouverne plus qu'une minorité de ses décisions. Ces deux mesures ont été
+  obtenues **hors suite de tests**, en modifiant le code puis en le rétablissant
+  et avec des compteurs depuis retirés : elles ne sont pas rejouées par
+  `dotnet test` et demandent de reposer les sondes pour être reproduites.
+  La garder pour le seul `HuntTargetParity` économiserait ce tir ; c'est écarté
+  parce que `CONTEXT.md` définit les deux difficultés comme ne différant **que**
+  par le balayage. Les faire diverger sur un second point rendrait l'écart mesuré
+  entre elles ininterprétable : il additionnerait deux changements, et on ne
+  saurait plus dire ce que le damier apporte. Voir `REVUE-IA.md`, revue 4.
 
 ## Vérification et réexamen
 
@@ -119,11 +127,17 @@ flotte, sans passer par `Game`. Moyennes sur 100 parties appariées (mêmes grai
 de placement pour les trois difficultés) — c'est le chiffre que les tests
 vérifient à chaque exécution.
 
-| Difficulté | Tirs moyens |
+| Difficulté — **code livré**, 100 parties | Tirs moyens |
 |---|---|
 | `Random` | 95,3 |
 | `HuntTarget` | 64,6 |
 | `HuntTargetParity` | 58,7 |
+
+Ces valeurs ont une précision d'environ ±1 tir et ne sont pas significatives à
+la décimale : la même variante donne 65,9 sur 4 000 parties. Elles ne valent que
+pour le **classement**, dont les écarts — 30 tirs puis 6 — sont très supérieurs
+à cette précision. `REVUE-IA.md` revue 4 porte la table complète par variante et
+par échantillon ; une valeur de 64,6 y désigne une **autre** variante.
 
 Les trois se classent, ce qui est la seule chose qui donne un sens au mot
 « difficulté ». Les bornes des tests sont larges et arrondies vers l'extérieur :
