@@ -3,6 +3,8 @@
 Une bataille navale jouable dans le navigateur, du front Blazor WebAssembly
 jusqu'au moteur de jeu côté serveur.
 
+**Dépôt** : <https://github.com/OlivierRecher/naval-dot-net>
+
 **Binôme** : Olivier Recher ([@OlivierRecher](https://github.com/OlivierRecher)) ·
 Ulysse ([@Oulssyyy](https://github.com/Oulssyyy))
 
