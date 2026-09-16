@@ -1,3 +1,4 @@
+using BattleShip.API.Persistence;
 using BattleShip.Domain;
 using BattleShip.Grpc;
 using FluentValidation;
@@ -24,7 +25,18 @@ public sealed class BattleGrpcService(IGameRepository repository) : Battle.Battl
             throw new RpcException(new Status(StatusCode.InvalidArgument, "Identifiant de partie invalide."));
         }
 
-        if (repository.Find(gameId) is not { } game)
+        Game? found;
+
+        try
+        {
+            found = repository.Find(gameId);
+        }
+        catch (UnreplayableJournalException error)
+        {
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, error.Message));
+        }
+
+        if (found is not { } game)
         {
             throw new RpcException(new Status(StatusCode.NotFound, "Partie inconnue."));
         }

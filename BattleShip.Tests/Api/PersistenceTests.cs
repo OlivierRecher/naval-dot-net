@@ -1,5 +1,6 @@
 using BattleShip.API.Persistence;
 using BattleShip.Domain;
+using BattleShip.Tests.Domain;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -65,8 +66,7 @@ public class PersistenceTests : IDisposable
         var strategy = new BotStrategyFactory(new Random(31)).For(BotDifficulty.HuntTarget);
         for (var turn = 0; turn < 8; turn++)
         {
-            game.FireFromClient(new Coordinates(turn, 0));
-            game.PlayBotTurn(strategy);
+            game.PlayRound(strategy, new Coordinates(turn, 0));
         }
 
         repository.Save(game);
@@ -116,8 +116,7 @@ public class PersistenceTests : IDisposable
         foreach (var cell in Enumerable.Range(0, 100).Select(i => new Coordinates(i % 10, i / 10)))
         {
             if (game.Status is GameStatus.Finished) break;
-            game.FireFromClient(cell);
-            game.PlayBotTurn(strategy);
+            game.PlayRound(strategy, cell);
         }
 
         repository.Save(game);
@@ -168,8 +167,7 @@ public class PersistenceTests : IDisposable
         var strategy = new BotStrategyFactory(new Random(31)).For(BotDifficulty.HuntTarget);
         for (var turn = 0; turn < 25 && game.Status is GameStatus.InProgress; turn++)
         {
-            game.FireFromClient(new Coordinates(turn % 10, turn / 10));
-            game.PlayBotTurn(strategy);
+            game.PlayRound(strategy, new Coordinates(turn % 10, turn / 10));
         }
 
         repository.Save(game);
@@ -185,6 +183,56 @@ public class PersistenceTests : IDisposable
 
         Assert.NotEmpty(stored);
         Assert.Equal(replayed, stored);
+    }
+
+    /// <summary>
+    /// Le journal ne porte que des coordonnées : le rejeu recalcule qui tirait,
+    /// donc il dépend de la règle du tour. Une partie enregistrée sous une autre
+    /// règle ne se reconstruit plus — elle se refuse, au lieu de remonter en
+    /// erreur serveur ou de se rejouer en silence sur la mauvaise grille.
+    /// Voir ADR 0014.
+    /// </summary>
+    [Fact]
+    public void AJournalWrittenUnderAnotherTurnRule_IsRefusedAtReplay()
+    {
+        var game = NewGame();
+        AfterRestart().Add(game);
+
+        // Sous « le tour passe toujours », ces deux tirs visaient deux grilles
+        // différentes : une touche sur celle du bot, puis le tir du bot sur la
+        // même case de celle de l'humain. Aujourd'hui le tireur garde la main
+        // après une touche, donc le rejeu les dirige tous deux sur la grille du
+        // bot — et le second y est refusé.
+        var hit = game.Opponent.Board.Ships[0].Cells[0];
+
+        using (var db = NewContext())
+        {
+            db.Shots.AddRange(
+                new ShotRecord
+                {
+                    GameId = game.Id,
+                    Ordinal = 0,
+                    ShooterId = game.CurrentPlayer.Id,
+                    Column = hit.Column,
+                    Row = hit.Row,
+                    Result = nameof(ShotResult.Hit)
+                },
+                new ShotRecord
+                {
+                    GameId = game.Id,
+                    Ordinal = 1,
+                    ShooterId = game.Opponent.Id,
+                    Column = hit.Column,
+                    Row = hit.Row,
+                    Result = nameof(ShotResult.Miss)
+                });
+
+            db.SaveChanges();
+        }
+
+        var refusal = Assert.Throws<UnreplayableJournalException>(() => AfterRestart().Find(game.Id));
+
+        Assert.Equal(game.Id, refusal.GameId);
     }
 
     [Fact]
@@ -227,9 +275,7 @@ public class PersistenceTests : IDisposable
 
         for (var turn = 0; turn < 10 && game.Status is GameStatus.InProgress; turn++)
         {
-            game.FireFromClient(new Coordinates(turn, 0));
-            repository.Save(game);
-            game.PlayBotTurn(strategy);
+            game.PlayRound(strategy, new Coordinates(turn, 0));
             repository.Save(game);
         }
 
@@ -343,8 +389,7 @@ public class PersistenceTests : IDisposable
         {
             while (!stop.IsSet && game.Status is GameStatus.InProgress)
             {
-                game.FireFromClient(new Coordinates(Random.Shared.Next(10), Random.Shared.Next(10)));
-                game.PlayBotTurn(strategy);
+                game.PlayRound(strategy, new Coordinates(Random.Shared.Next(10), Random.Shared.Next(10)));
             }
         });
 
@@ -399,8 +444,7 @@ public class PersistenceTests : IDisposable
         foreach (var cell in Enumerable.Range(0, 100).Select(i => new Coordinates(i % 10, i / 10)))
         {
             if (game.Status is GameStatus.Finished) break;
-            game.FireFromClient(cell);
-            game.PlayBotTurn(strategy);
+            game.PlayRound(strategy, cell);
             repository.Save(game);
         }
 

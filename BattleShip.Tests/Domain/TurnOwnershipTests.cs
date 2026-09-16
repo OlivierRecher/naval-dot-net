@@ -9,6 +9,21 @@ namespace BattleShip.Tests.Domain;
 /// </summary>
 public class TurnOwnershipTests
 {
+    private sealed class ScriptedBotStrategy(params Coordinates[] targets) : IBotStrategy
+    {
+        private int _index;
+
+        public Coordinates ChooseTarget(GameView view, BoardSize size)
+        {
+            if (_index >= targets.Length)
+            {
+                throw new InvalidOperationException("Aucune cible bot restante.");
+            }
+
+            return targets[_index++];
+        }
+    }
+
     private static Game SoloGameWhereTheHumanOpens()
     {
         var placer = new RandomFleetPlacer(new Random(17));
@@ -56,14 +71,40 @@ public class TurnOwnershipTests
     [Fact]
     public void PlayBotTurn_WhenItIsTheBotTurn_FiresOnceAndGivesTheTurnBack()
     {
-        var game = SoloGameWhereTheHumanOpens();
-        game.FireFromClient(new Coordinates(3, 3));
+        var human = new Player("Humain", isBot: false,
+            Rounds.BoardWith(new ShipPlacement(ShipKind.Destroyer, new Coordinates(0, 0), Orientation.Horizontal)));
+        var bot = new Player("Bot", isBot: true,
+            Rounds.BoardWith(new ShipPlacement(ShipKind.Destroyer, new Coordinates(7, 7), Orientation.Horizontal)));
+        var game = new Game(GameMode.Solo, human, bot);
+        game.FireFromClient(new Coordinates(5, 5));
 
-        var outcome = game.PlayBotTurn(new RandomBot(new Random(1)));
+        var outcome = game.PlayBotTurn(new ScriptedBotStrategy(new Coordinates(9, 9)));
 
         Assert.True(outcome.IsAccepted);
         Assert.Equal(2, game.Shots.Count);
         Assert.Equal(outcome.Target, game.Shots[^1].Target);
+        Assert.False(game.CurrentPlayer.IsBot);
+    }
+
+    [Fact]
+    public void PlayBotTurn_OnHit_LetsTheBotReplay()
+    {
+        var human = new Player("Humain", isBot: false,
+            Rounds.BoardWith(new ShipPlacement(ShipKind.Destroyer, new Coordinates(0, 0), Orientation.Horizontal)));
+        var bot = new Player("Bot", isBot: true,
+            Rounds.BoardWith(new ShipPlacement(ShipKind.Destroyer, new Coordinates(7, 7), Orientation.Horizontal)));
+        var game = new Game(GameMode.Solo, human, bot);
+
+        game.FireFromClient(new Coordinates(5, 5));
+
+        var strategy = new ScriptedBotStrategy(new Coordinates(0, 0), new Coordinates(9, 9));
+        var first = game.PlayBotTurn(strategy);
+
+        Assert.Equal(ShotResult.Hit, first.Result);
+        Assert.True(game.CurrentPlayer.IsBot);
+
+        var second = game.PlayBotTurn(strategy);
+        Assert.True(second.IsAccepted);
         Assert.False(game.CurrentPlayer.IsBot);
     }
 

@@ -109,44 +109,25 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
         var gameId = View.GameId;
 
-        // En hot-seat, la vue bascule sur l'autre joueur des le tir resolu : le
-        // nom du tireur doit etre retenu avant, sinon le message s'adresse au
-        // mauvais joueur. Celui du suivant aussi, pour armer la passation sans
-        // dependre du rafraichissement.
+        // En hot-seat, la vue bascule sur l'autre joueur des que le tir rend la
+        // main : le nom du tireur doit etre retenu avant, sinon le message
+        // s'adresse au mauvais joueur. Celui du suivant aussi, pour armer la
+        // passation sans dependre du rafraichissement.
         var shooter = IsHotSeat ? View.ViewerName : "Vous";
         var nextPlayer = IsHotSeat ? View.OpponentName : null;
 
         await RunAsync(async () =>
         {
+            ShotOutcome outcome;
+
             try
             {
-                var outcome = await battle.FireAsync(new FireCommand
+                outcome = await battle.FireAsync(new FireCommand
                 {
                     GameId = gameId.ToString(),
                     Column = column,
                     Row = row
                 });
-
-                Notice = Describe(outcome.Result, shooter);
-
-                if (outcome.GameOver)
-                {
-                    await RefreshAsync(gameId);
-                    return;
-                }
-
-                if (nextPlayer is not null)
-                {
-                    // Arme AVANT le rafraichissement : le tour a deja change cote
-                    // serveur. Si le GET echoue, l'interface reste sur l'ecran de
-                    // passation au lieu de rendre la vue perimee du tireur — qui
-                    // le laisserait rejouer, et le serveur accepterait ce tir
-                    // comme celui de l'adversaire. La passation est le seul garde
-                    // du tour en hot-seat.
-                    HandoverTo = nextPlayer;
-                    await RefreshAsync(gameId);
-                    return;
-                }
             }
             catch (RpcException error) when (error.StatusCode is StatusCode.FailedPrecondition or StatusCode.InvalidArgument)
             {
@@ -155,7 +136,36 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
                 return;
             }
 
-            await PlayBotTurnAsync(gameId);
+            Notice = Describe(outcome.Result, shooter);
+
+            if (outcome.GameOver)
+            {
+                await RefreshAsync(gameId);
+                return;
+            }
+
+            // Le tour ne change qu'au coup manque : sur une touche le tireur
+            // garde la main, donc ni passation ni tour du bot. Voir AGENTS.md § 3.
+            if (outcome.Result is not "Miss")
+            {
+                await RefreshAsync(gameId);
+                return;
+            }
+
+            if (nextPlayer is not null)
+            {
+                // Arme AVANT le rafraichissement : le tour a deja change cote
+                // serveur. Si le GET echoue, l'interface reste sur l'ecran de
+                // passation au lieu de rendre la vue perimee du tireur — qui
+                // le laisserait rejouer, et le serveur accepterait ce tir
+                // comme celui de l'adversaire. La passation est le seul garde
+                // du tour en hot-seat.
+                HandoverTo = nextPlayer;
+                await RefreshAsync(gameId);
+                return;
+            }
+
+            await PlayBotTurnsAsync(gameId);
             await RefreshAsync(gameId);
         });
     }
@@ -175,7 +185,7 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
         await RunAsync(async () =>
         {
-            await PlayBotTurnAsync(gameId);
+            await PlayBotTurnsAsync(gameId);
             await RefreshAsync(gameId);
         });
     }
@@ -332,23 +342,47 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
     }
 
 
-    private async Task PlayBotTurnAsync(Guid gameId)
+    /// <summary>
+    /// Le bot garde la main tant qu'il touche : un seul tir de l'humain peut
+    /// donc lui valoir plusieurs tirs d'affilee. Ils sont annonces d'un bloc,
+    /// sinon le joueur lit une ligne repetee autant de fois que le bot a touche.
+    /// </summary>
+    private async Task PlayBotTurnsAsync(Guid gameId)
     {
-        var response = await http.PostAsJsonAsync($"games/{gameId}/bot-turn", new { });
+        var shots = new List<string>();
 
-        if (!response.IsSuccessStatusCode)
+        while (true)
         {
-            Failure = $"Le bot n'a pas pu jouer (HTTP {(int)response.StatusCode}). Votre tir est enregistré ; relancez le tour du bot.";
+            var response = await http.PostAsJsonAsync($"games/{gameId}/bot-turn", new { });
+
+            if (!response.IsSuccessStatusCode)
+            {
+                Failure = $"Le bot n'a pas pu jouer (HTTP {(int)response.StatusCode}). Votre tir est enregistré ; relancez le tour du bot.";
+                break;
+            }
+
+            if (await response.Content.ReadFromJsonAsync<ShotOutcomeResponse>() is not { } outcome)
+            {
+                break;
+            }
+
+            var cell = $"{(char)('A' + outcome.Target.Column)}{outcome.Target.Row + 1}";
+            shots.Add($"{cell}, {Describe(outcome.Result, "il")}");
+
+            if (outcome.GameOver || outcome.Result is "Miss")
+            {
+                break;
+            }
+        }
+
+        if (shots.Count is 0)
+        {
             return;
         }
 
-        var outcome = await response.Content.ReadFromJsonAsync<ShotOutcomeResponse>();
-
-        if (outcome is not null)
-        {
-            var cell = $"{(char)('A' + outcome.Target.Column)}{outcome.Target.Row + 1}";
-            Notice += $" — Le bot tire en {cell} : {Describe(outcome.Result, "il")}";
-        }
+        Notice += shots.Count is 1
+            ? $" — Le bot tire en {shots[0]}"
+            : $" — Le bot enchaîne {shots.Count} tirs : {string.Join(" ", shots)}";
     }
 
     private async Task RefreshAsync(Guid gameId) =>

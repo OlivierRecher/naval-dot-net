@@ -232,12 +232,18 @@ binôme ne saurait ni terminer ni défendre.
   normalement ces cases ; cette commande contourne l'interface, pas le serveur.
 - **Le tour du bot est un appel distinct du tir du joueur.** Si cet appel
   échoue, l'interface le signale et propose de le relancer, mais la partie reste
-  en attente jusque-là.
+  en attente jusque-là. Depuis l'[ADR 0014](./docs/adr/0014-une-touche-rend-la-main-au-tireur.md),
+  le bot enchaîne tant qu'il touche : un seul tir du joueur peut donc lui en
+  valoir plusieurs, et rien ne borne la série.
+- **Une partie enregistrée avant un changement de règle ne se recharge plus.**
+  Le journal ne stocke que des coordonnées et le rejeu déduit qui tirait : le
+  serveur répond 409 avec un message, au lieu de reconstruire une autre partie.
+  Voir l'[ADR 0014](./docs/adr/0014-une-touche-rend-la-main-au-tireur.md).
 - **Aucun test automatisé côté Blazor.** Le comportement du client est vérifié à
   la main dans le navigateur ; un double de `HttpMessageHandler` et `bUnit`
   seraient nécessaires pour le couvrir. Cette zone a produit trois des défauts
   les plus instructifs du projet, tous invisibles à une suite verte — voir
-  `REVUE-IA.md`, revues 5 et 7.
+  `REVUE-IA.md`, revues 5, 7 et 11.
 - **L'écran de passation du hot-seat protège l'écran, pas les données.** La vue
   du joueur suivant est déjà dans le navigateur quand la passation s'affiche :
   elle y est arrivée en réponse au tir. Sur un appareil partagé, les données des

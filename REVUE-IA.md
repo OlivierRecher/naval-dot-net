@@ -9,7 +9,7 @@ en défaut, ce qui a réellement été observé, et ce qui reste non vérifié.
 
 Binôme : Olivier Recher (@OlivierRecher) · Ulysse (@Oulssyyy)
 
-**État : 10 revues — 2 adaptées, 1 correctif rejeté, 2 conclusions invalidées, 2 défauts invisibles aux tests, 2 fois des tests qui ne testaient pas, 1 limite annoncée puis soldée.**
+**État : 11 revues — 2 adaptées, 1 correctif rejeté, 3 conclusions invalidées, 3 défauts invisibles aux tests, 2 fois des tests qui ne testaient pas, 1 suite rendue non déterministe, 1 limite annoncée puis soldée.**
 
 ---
 
@@ -1238,3 +1238,132 @@ quand il faut réexaminer.
 Corollaire pratique : `EnsureCreated` est silencieux sur un schéma périmé. Une
 opération qui ne peut pas signaler qu'elle n'a rien fait est un mauvais endroit
 pour déposer une hypothèse.
+
+---
+
+## Revue 11 — Une règle du jeu changée dans le domaine reste-t-elle une modification du domaine ?
+
+> **Brouillon proposé par Claude Code.** Les faits, les expériences et les
+> observations ci-dessous ont été exécutés et sont reproductibles. La section
+> « Décision et justification » attend la relecture du binôme : c'est elle qui
+> est notée, pas le constat.
+
+**Proposition examinée**
+
+Une branche générée par Copilot (`copilot/fix-play-again-when-hit-boat`) change
+la règle du tour : une touche laisse la main au tireur. Le cœur du changement
+tient en trois lignes de `Game.FireLocked`, et la branche livre trois tests de
+domaine qui les couvrent correctement.
+
+La proposition implicite est celle que fait toute IA devant ce genre de
+demande : **« la règle vit dans le domaine, donc la changer est une modification
+du domaine »**.
+
+**Hypothèse à vérifier**
+
+> Hors du domaine, rien ne dépend de la règle du tour. Un changement correct et
+> testé dans `Game` laisse le reste du projet cohérent.
+
+**Expérience**
+
+Trois contrôles, choisis parce qu'ils interrogent trois dépendances différentes :
+
+1. `dotnet build` sur la solution **entière** — la suite de tests ne référence
+   ni `BattleShip.App`, donc un front cassé ne s'y verrait pas.
+2. `dotnet test` **répété**, pas une fois : les flottes sont placées avec
+   `Random.Shared` (`Program.cs`), donc un test dépendant d'une touche ou d'un
+   raté échoue au hasard, pas systématiquement.
+3. Rejeu d'un journal plausible écrit sous l'ancienne règle, via un programme
+   jetable référençant `BattleShip.Domain`.
+
+Résultats attendus, écrits avant exécution : si l'hypothèse tient, la solution
+compile, la suite est verte à chaque exécution, et une partie enregistrée se
+relit à l'identique.
+
+**Observation**
+
+L'hypothèse est fausse sur les trois plans.
+
+1. La solution **ne compile pas** :
+   ```
+   BattleShip.App/Services/GameSession.cs(158,17): error CS0103:
+     Le nom 'outcome' n'existe pas dans le contexte actuel
+   ```
+   La variable était déclarée dans un `try`, relue après le `catch`. Le front
+   n'avait jamais été compilé — et `dotnet test` seul ne pouvait pas le dire.
+
+2. Sept exécutions de la suite ont donné **entre 0 et 3 échecs**, sur des tests
+   différents : `RecentGames_ListsWhatWasPlayed`,
+   `Fire_OverGrpc_WhileItIsTheBotTurn_ReportsFailedPrecondition`,
+   `Endpoints_RunAgainstASubstitutedRepository_WithoutAnyEndpointChange`, entre
+   autres. Une exécution était entièrement verte. Cinq tests de plus étaient
+   devenus fragiles sans être encore rouges. Tous partageaient la même hypothèse
+   tacite : « l'humain a tiré, donc c'est au bot ».
+
+3. Le rejeu d'un journal ancien :
+   ```
+   REJET AU REJEU : Journal incoherent : le tir en Coordinates { Column = 7, Row = 7 }
+     est refuse au rejeu de la partie 3d4375c9-…
+   ```
+   `Game.Restore` lève, `GetGame` ne rattrape pas : HTTP 500. Cause : l'ADR 0012
+   ne stocke que des coordonnées et **déduit** le tireur en appliquant la règle
+   du tour.
+
+Un quatrième défaut est apparu à la lecture, qu'aucun de ces contrôles n'aurait
+trouvé : en hot-seat, `GameSession.FireAsync` armait la passation à chaque tir.
+Sur une touche, le tour ne change plus, donc `IsHandoverReady` ne devient jamais
+vrai et l'écran reste bloqué sur « L'état de la partie n'a pas pu être récupéré »,
+avec un bouton *Réessayer* qui ne peut pas réussir. **Aucun test ne pouvait le
+voir : `BattleShip.App` n'a pas de projet de test.**
+
+**Décision et justification**
+
+*(à compléter et à assumer par le binôme — ce qui suit n'est qu'une proposition)*
+
+Règle retenue : **une règle du jeu n'est pas une règle du domaine.** Elle vit
+dans le domaine, mais elle est lue ailleurs — par le front qui enchaîne les
+appels, par les tests qui pilotent une partie, par le rejeu qui reconstitue un
+tour. Changer une règle oblige à faire l'inventaire de ses lecteurs.
+
+Conséquence pratique adoptée : le pilotage d'une partie ne s'écrit plus en
+alternant en aveugle. `GamePlay` (API) et `Rounds.PlayRound` (domaine) lisent à
+qui est le tour, exactement comme le navigateur. Un test qui suppose l'alternance
+ne peut plus être écrit sans le faire exprès.
+
+**Preuves et limites**
+
+| | |
+|---|---|
+| Proposition | Branche Copilot, changement de la règle du tour |
+| Défaut 1 | La solution ne compile pas (`CS0103`, front) |
+| Défaut 2 | 5 tests d'intégration rendus non déterministes, 0 à 3 échecs selon le tirage |
+| Défaut 3 | Journal antérieur au changement : HTTP 500 au rechargement |
+| Défaut 4 | Hot-seat bloqué à la première touche — invisible aux tests |
+| Correction | Règle conservée ; front, tests, persistance et documentation alignés |
+| Mutations | Règle inversée → 8 tests rouges · garde de rejeu retirée → 1 · filtre 409 retiré → 1 |
+| État final | 253 tests, 17 exécutions consécutives sans échec |
+
+Ce qui **reste non vérifié** :
+
+- Le correctif du hot-seat n'est couvert par aucun test automatisé. Le contrat
+  serveur l'est (`Fire_InLocalMode_OnAHit_KeepsTheViewOnTheSameHuman`), le
+  comportement du navigateur ne l'est que par la lecture et l'essai manuel.
+  **Ouvrir un projet de test pour `BattleShip.App` reste à décider.**
+- La suite reste dépendante de `Random.Shared` pour le placement des flottes.
+  Dix-sept exécutions vertes ne valent pas une graine fixe ; elles rendent
+  seulement une régression probable au lieu d'être certaine d'être vue.
+- Aucune vérification n'a porté sur une base réellement écrite par la version
+  précédente : le journal incohérent est reconstitué à la main.
+
+**Ce que cette revue enseigne pour la suite du projet**
+
+Le défaut le plus coûteux — le hot-seat bloqué — n'a été trouvé par aucune
+commande. Il a été trouvé en lisant le code du front en se demandant *qui d'autre
+croyait que le tour changeait*. Les trois autres l'ont été par des contrôles
+qu'il fallait choisir : compiler la **solution** et pas le projet de tests,
+répéter la suite au lieu de la lancer une fois, rejouer un journal ancien au lieu
+d'en écrire un neuf.
+
+Corollaire, dans la lignée de la revue 10 : **une suite verte ne prouve que ce
+qu'elle exécute.** Ici elle n'exécutait pas le front, et elle n'exécutait qu'un
+tirage sur plusieurs.

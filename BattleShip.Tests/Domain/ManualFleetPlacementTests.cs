@@ -160,8 +160,7 @@ public class ManualFleetPlacementTests
         foreach (var cell in Enumerable.Range(0, 100).Select(i => new Coordinates(i % 10, i / 10)))
         {
             if (game.Status is GameStatus.Finished) break;
-            game.FireFromClient(cell);
-            game.PlayBotTurn(strategy);
+            game.PlayRound(strategy, cell);
         }
 
         Assert.Equal(GameStatus.Finished, game.Status);

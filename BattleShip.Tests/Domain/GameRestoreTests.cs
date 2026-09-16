@@ -23,8 +23,7 @@ public class GameRestoreTests
 
         for (var turn = 0; turn < turns && game.Status is GameStatus.InProgress; turn++)
         {
-            game.FireFromClient(new Coordinates(turn % 10, turn / 10));
-            game.PlayBotTurn(strategy);
+            game.PlayRound(strategy, new Coordinates(turn % 10, turn / 10));
         }
 
         return (game,

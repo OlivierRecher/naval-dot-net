@@ -8,25 +8,38 @@ public class HistoryEndpointsTests(ApiFactory factory) : IClassFixture<ApiFactor
 {
     private readonly HttpClient _client = factory.CreateClient();
 
-    private async Task<GameViewResponse> PlayAsync(string difficulty, int shots)
+    /// <summary>
+    /// Joue <paramref name="rounds"/> allers-retours et rend le nombre de tirs
+    /// réellement acceptés. Il n'est plus déductible du nombre de tours : le bot
+    /// enchaîne tant qu'il touche. Ce compte est tenu par le test, à partir des
+    /// réponses de chaque tir — c'est le témoin indépendant du comptage SQL.
+    /// </summary>
+    private async Task<(GameViewResponse View, int Shots)> PlayAsync(string difficulty, int rounds)
     {
         var created = await _client.PostAsJsonAsync(
             "/games", new CreateGameRequest("Olivier", 10, 10, "Solo", difficulty, "Random"));
         var view = (await created.Content.ReadFromJsonAsync<GameViewResponse>())!;
 
-        for (var turn = 0; turn < shots; turn++)
+        var shots = 0;
+
+        for (var round = 0; round < rounds; round++)
         {
-            await _client.PostAsJsonAsync($"/games/{view.GameId}/shots", new FireRequest(turn % 10, turn / 10));
-            await _client.PostAsJsonAsync($"/games/{view.GameId}/bot-turn", new { });
+            var played = await _client.PlayRoundAsync(view.GameId, round % 10, round / 10);
+            shots += played.Count;
+
+            if (played[^1].GameOver)
+            {
+                break;
+            }
         }
 
-        return view;
+        return (view, shots);
     }
 
     [Fact]
     public async Task RecentGames_ListsWhatWasPlayed()
     {
-        var game = await PlayAsync("HuntTarget", 3);
+        var (game, shots) = await PlayAsync("HuntTarget", 3);
 
         var response = await _client.GetAsync("/games");
 
@@ -39,7 +52,7 @@ public class HistoryEndpointsTests(ApiFactory factory) : IClassFixture<ApiFactor
         Assert.Equal("HuntTarget", mine.BotDifficulty);
         Assert.Equal("Olivier", mine.FirstPlayer);
         Assert.Equal("Bot", mine.SecondPlayer);
-        Assert.Equal(6, mine.Shots);
+        Assert.Equal(shots, mine.Shots);
         Assert.Null(mine.Winner);
     }
 
@@ -52,12 +65,12 @@ public class HistoryEndpointsTests(ApiFactory factory) : IClassFixture<ApiFactor
     public async Task RecentGames_CountsTheShotsWithoutReplayingTheGames()
     {
         await PlayAsync("Random", 2);
-        await PlayAsync("Random", 5);
+        var (longest, shots) = await PlayAsync("Random", 5);
 
         var history = await _client.GetFromJsonAsync<List<GameSummaryResponse>>("/games?limit=2");
 
         Assert.Equal(2, history!.Count);
-        Assert.Contains(history, summary => summary.Shots == 10);
+        Assert.Equal(shots, history.Single(summary => summary.GameId == longest.GameId).Shots);
     }
 
     /// <summary>
@@ -78,18 +91,19 @@ public class HistoryEndpointsTests(ApiFactory factory) : IClassFixture<ApiFactor
 
         var counted = new Dictionary<string, int> { ["Miss"] = 0, ["Hit"] = 0, ["Sunk"] = 0 };
 
-        async Task RecordAsync(HttpResponseMessage response)
+        for (var round = 0; round < 40; round++)
         {
-            if (!response.IsSuccessStatusCode) return;
-            var outcome = await response.Content.ReadFromJsonAsync<ShotOutcomeResponse>();
-            counted[outcome!.Result]++;
-        }
+            var played = await client.PlayRoundAsync(view.GameId, round % 10, round / 10);
 
-        for (var turn = 0; turn < 40; turn++)
-        {
-            await RecordAsync(await client.PostAsJsonAsync(
-                $"/games/{view.GameId}/shots", new FireRequest(turn % 10, turn / 10)));
-            await RecordAsync(await client.PostAsJsonAsync($"/games/{view.GameId}/bot-turn", new { }));
+            foreach (var outcome in played)
+            {
+                counted[outcome.Result]++;
+            }
+
+            if (played[^1].GameOver)
+            {
+                break;
+            }
         }
 
         var stats = await client.GetFromJsonAsync<StatisticsResponse>("/stats");

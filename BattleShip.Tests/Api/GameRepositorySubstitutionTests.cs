@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using BattleShip.API.Persistence;
 using BattleShip.Domain;
 using BattleShip.Models;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -46,6 +47,20 @@ public class GameRepositorySubstitutionTests(ApiFactory factory)
         public void Save(Game game) => Saves++;
     }
 
+    /// <summary>
+    /// Le dépôt qui ne peut pas reconstruire ce qu'il a stocké : c'est ce que
+    /// devient un journal écrit sous d'autres règles. Voir ADR 0014.
+    /// </summary>
+    private sealed class UnreplayableGameRepository : IGameRepository
+    {
+        public void Add(Game game) { }
+
+        public Game? Find(Guid id) =>
+            throw new UnreplayableJournalException(id, new InvalidOperationException("journal incoherent"));
+
+        public void Save(Game game) { }
+    }
+
     private (HttpClient Client, RecordingGameRepository Repository) SubstitutedHost()
     {
         var repository = new RecordingGameRepository();
@@ -69,21 +84,45 @@ public class GameRepositorySubstitutionTests(ApiFactory factory)
         var view = await created.Content.ReadFromJsonAsync<GameViewResponse>();
 
         var read = await client.GetAsync($"/games/{view!.GameId}");
-        var shot = await client.PostAsJsonAsync($"/games/{view.GameId}/shots", new FireRequest(0, 0));
-        var botTurn = await client.PostAsJsonAsync($"/games/{view.GameId}/bot-turn", new { });
-
         Assert.Equal(HttpStatusCode.OK, read.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, shot.StatusCode);
+
+        // Le nombre de tirs qu'il faut pour rendre la main au bot depend du
+        // hasard des flottes : on compte donc ce que le tour du bot ajoute, pas
+        // un total.
+        await client.FireUntilTheBotHasTheHandAsync(view.GameId);
+
+        var lookups = repository.Lookups;
+        var saves = repository.Saves;
+
+        var botTurn = await client.PostAsJsonAsync($"/games/{view.GameId}/bot-turn", new { });
         Assert.Equal(HttpStatusCode.OK, botTurn.StatusCode);
 
         // La partie a bien transité par NOTRE dépôt, pas par celui de production.
         Assert.Equal(1, repository.Added);
-        Assert.Equal(3, repository.Lookups);
+        Assert.Equal(lookups + 1, repository.Lookups);
 
-        // Deux mutations, deux validations. Ce compteur est la trace du point que
+        // Une mutation, une validation. Ce compteur est la trace du point que
         // l'ADR 0004 n'avait pas prévu : un dépôt en mémoire n'en a pas besoin,
         // un dépôt persistant ne peut pas s'en passer. Voir REVUE-IA revue 8.
-        Assert.Equal(2, repository.Saves);
+        Assert.Equal(saves + 1, repository.Saves);
+    }
+
+    /// <summary>
+    /// Une partie que le dépôt ne sait plus rejouer se refuse, avec un message :
+    /// sans ce filtre, un GET anodin remonterait en erreur serveur, et la cause
+    /// resterait invisible au joueur comme au binôme. Voir ADR 0014.
+    /// </summary>
+    [Fact]
+    public async Task GetGame_WhenTheJournalNoLongerReplays_Returns409()
+    {
+        var client = factory
+            .WithWebHostBuilder(builder => builder.ConfigureTestServices(
+                services => services.AddSingleton<IGameRepository>(new UnreplayableGameRepository())))
+            .CreateClient();
+
+        var response = await client.GetAsync($"/games/{Guid.NewGuid()}");
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
     [Fact]

@@ -41,7 +41,7 @@ Décisions prises par le binôme :
 | Langue | Code en anglais, livrables `.md` en français |
 | Git | Branches + PR relue par l'autre membre |
 | Périmètre | Multijoueur **local** (hot-seat) à la place du multijoueur en ligne |
-| Règles | Grille 10×10, flotte classique, contact autorisé, le tour passe toujours |
+| Règles | Grille 10×10, flotte classique, contact autorisé, le tour passe toujours *(règle du cadrage initial ; remplacée depuis, voir ADR 0014)* |
 | Projets | 5 projets : `Domain` séparé de `Models` |
 | Modèle | Agrégat mutable + journal de tirs en ajout seul |
 | État serveur | Serveur autoritaire, **aucune identité de joueur transmise par le client** |

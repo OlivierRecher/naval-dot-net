@@ -144,16 +144,23 @@ public sealed class SqliteGameRepository(BattleShipDbContext db, GameCache cache
         var size = new BoardSize(record.Columns, record.Rows);
         var seats = record.Players.OrderBy(player => player.Seat).ToList();
 
-        var game = Game.Restore(
-            record.Id,
-            EnumNames<GameMode>.Parse(record.Mode),
-            PlayerFrom(seats[0], size),
-            PlayerFrom(seats[1], size),
-            EnumNames<BotDifficulty>.Parse(record.BotDifficulty),
-            [.. record.Shots.OrderBy(shot => shot.Ordinal).Select(shot => new Coordinates(shot.Column, shot.Row))],
-            FleetFrom(record.Fleet));
+        try
+        {
+            var game = Game.Restore(
+                record.Id,
+                EnumNames<GameMode>.Parse(record.Mode),
+                PlayerFrom(seats[0], size),
+                PlayerFrom(seats[1], size),
+                EnumNames<BotDifficulty>.Parse(record.BotDifficulty),
+                [.. record.Shots.OrderBy(shot => shot.Ordinal).Select(shot => new Coordinates(shot.Column, shot.Row))],
+                FleetFrom(record.Fleet));
 
-        return cache.Remember(game);
+            return cache.Remember(game);
+        }
+        catch (InvalidOperationException error)
+        {
+            throw new UnreplayableJournalException(record.Id, error);
+        }
     }
 
     private static PlayerRecord PlayerOf(PlayerState player, Guid gameId, int seat) => new()

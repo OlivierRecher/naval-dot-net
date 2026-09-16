@@ -1,3 +1,4 @@
+using BattleShip.API.Persistence;
 using BattleShip.API.Validation;
 using BattleShip.Domain;
 using BattleShip.Models;
@@ -8,7 +9,9 @@ public static class GameEndpoints
 {
     public static IEndpointRouteBuilder MapGameEndpoints(this IEndpointRouteBuilder routes)
     {
-        var games = routes.MapGroup("/games").WithTags("Games");
+        var games = routes.MapGroup("/games")
+            .WithTags("Games")
+            .AddEndpointFilter(RefuseUnreplayableJournal);
 
         games.MapPost("/", CreateGame)
             .WithName("CreateGame")
@@ -148,6 +151,25 @@ public static class GameEndpoints
 
     private static IResult Overall(IGameHistory history) =>
         TypedResults.Ok(history.Overall().ToResponse());
+
+    /// <summary>
+    /// Une partie enregistrée sous d'autres règles que celles en vigueur ne se
+    /// reconstruit plus : le refus est explicite, plutôt qu'une erreur serveur
+    /// sur un GET anodin. Voir ADR 0014.
+    /// </summary>
+    private static async ValueTask<object?> RefuseUnreplayableJournal(
+        EndpointFilterInvocationContext context,
+        EndpointFilterDelegate next)
+    {
+        try
+        {
+            return await next(context);
+        }
+        catch (UnreplayableJournalException error)
+        {
+            return TypedResults.Problem(error.Message, statusCode: StatusCodes.Status409Conflict);
+        }
+    }
 
     private static IResult Refused(FleetRejection rejection) => rejection switch
     {

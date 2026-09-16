@@ -50,7 +50,8 @@ Libres selon le support, donc à défendre. Toutes paramétrables dès le dépar
   Personnalisable depuis l'item 6, `PatrolBoat` 1 compris. Voir ADR 0013.
 - Placement **horizontal ou vertical** uniquement. Chevauchement interdit,
   **contact autorisé** (deux navires peuvent se toucher).
-- **Le tour passe toujours**, touché ou non.
+- **Une touche rend la main au tireur** : le tour ne passe qu'au coup manqué.
+  Un navire coulé compte comme une touche. Voir ADR 0014.
 - **Une case déjà visée est une tentative refusée** : elle ne modifie pas la
   partie et **ne consomme pas le tour**.
 - Fin de partie quand une flotte est entièrement coulée. Aucun tir n'est accepté ensuite.
@@ -284,6 +285,7 @@ ADR déjà identifiés par le cadrage :
 - `0011` Le hot-seat est une alternance de vues, et la passation protège l'écran
 - `0012` Persister le journal, rejouer le reste
 - `0013` Flotte personnalisable, et pas du damier déduit du plus petit navire
+- `0014` Une touche rend la main au tireur, et ce que cela coûte au rejeu
 
 ### `REVUE-IA.md`
 **Trois revues minimum.** Proposition · hypothèse à vérifier · expérience

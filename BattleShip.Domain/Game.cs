@@ -297,7 +297,12 @@ public sealed class Game
             return FireOutcome.Accepted(target, result);
         }
 
-        (_current, _waiting) = (_waiting, _current);
+        // Une touche rend la main au tireur : le tour ne change qu'au coup
+        // manque. Voir AGENTS.md § 3 et l'ADR 0014.
+        if (result is ShotResult.Miss)
+        {
+            (_current, _waiting) = (_waiting, _current);
+        }
 
         return FireOutcome.Accepted(target, result);
     }
