@@ -16,6 +16,16 @@ public class GameViewForClientTests
     private static HashSet<Coordinates> FleetOf(Player player) =>
         [.. player.Board.Ships.SelectMany(ship => ship.Cells)];
 
+    /// <summary>
+    /// Une case libre de la grille visee : le tir y manque a coup sur, donc la
+    /// main passe. Choisir une case en dur ferait dependre le test du tirage du
+    /// placeur, sans le dire.
+    /// </summary>
+    private static Coordinates AnEmptyCellOf(Player player) =>
+        Enumerable.Range(0, 100)
+            .Select(index => new Coordinates(index % 10, index / 10))
+            .First(cell => !FleetOf(player).Contains(cell));
+
     [Fact]
     public void ViewForClient_WhileItIsTheHumanTurn_DescribesTheHuman()
     {
@@ -30,11 +40,14 @@ public class GameViewForClientTests
     [Fact]
     public void ViewForClient_OnceTheBotIsToPlay_StillDescribesTheHuman()
     {
-        // Apres le tir de l'humain le tour passe au bot. Renvoyer la vue du
-        // joueur courant reviendrait alors a livrer la flotte du bot au
-        // navigateur. Voir ADR 0003.
+        // Une fois la main passee au bot, renvoyer la vue du joueur courant
+        // reviendrait a livrer la flotte du bot au navigateur. Voir ADR 0003.
         var game = SoloGameWhereTheHumanOpens();
-        game.FireFromClient(new Coordinates(0, 0));
+        var outcome = game.FireFromClient(AnEmptyCellOf(game.Opponent));
+
+        // La main ne passe qu'au coup manque : sans cette garantie, le test
+        // affirmerait « une fois au bot de jouer » sans y etre. AGENTS.md § 3.
+        Assert.Equal(ShotResult.Miss, outcome.Result);
 
         var view = game.ViewForClient();
 
@@ -54,14 +67,16 @@ public class GameViewForClientTests
         // different rend les assertions suivantes discriminantes.
         Assert.False(humanFleet.SetEquals(botFleet), "les deux flottes sont identiques : le test ne prouverait rien");
 
-        game.FireFromClient(new Coordinates(0, 0));
-        var view = game.ViewForClient();
+        var target = AnEmptyCellOf(game.Opponent);
 
+        Assert.Equal(ShotResult.Miss, game.FireFromClient(target).Result);
+
+        var view = game.ViewForClient();
         var served = view.OwnFleet.SelectMany(ship => ship.Cells).ToHashSet();
 
         Assert.True(served.SetEquals(humanFleet), "la vue servie ne decrit pas la flotte de l'humain");
         Assert.False(served.SetEquals(botFleet), "la vue servie decrit la flotte du bot");
-        Assert.All(view.ShotsFired, cell => Assert.Equal(new Coordinates(0, 0), cell.Target));
+        Assert.All(view.ShotsFired, cell => Assert.Equal(target, cell.Target));
     }
 
     [Fact]

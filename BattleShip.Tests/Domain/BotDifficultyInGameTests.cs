@@ -21,17 +21,19 @@ public class BotDifficultyInGameTests
     {
         var game = SoloGame(difficulty, seed: 13);
         var strategy = new BotStrategyFactory(new Random(13)).For(difficulty);
-        var cells = Enumerable.Range(0, 100).Select(index => new Coordinates(index % 10, index / 10));
+        var nextHumanCell = 0;
 
-        foreach (var cell in cells)
+        for (var turn = 0; turn < 400 && game.Status is GameStatus.InProgress; turn++)
         {
-            if (game.Status is GameStatus.Finished)
+            if (game.CurrentPlayer.IsBot)
             {
-                break;
+                game.PlayBotTurn(strategy);
+                continue;
             }
 
+            var cell = new Coordinates(nextHumanCell % 10, (nextHumanCell / 10) % 10);
+            nextHumanCell++;
             game.FireFromClient(cell);
-            game.PlayBotTurn(strategy);
         }
 
         Assert.Equal(GameStatus.Finished, game.Status);

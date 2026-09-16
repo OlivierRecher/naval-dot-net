@@ -33,6 +33,23 @@ public class LocalGameTests
         Assert.Equal("Ulysse", game.ViewForClient().ViewerName);
     }
 
+    [Fact]
+    public void FireFromClient_InALocalGame_OnHit_LetsTheSameHumanReplay()
+    {
+        var first = new Player("Olivier", isBot: false,
+            Rounds.BoardWith(new ShipPlacement(ShipKind.Destroyer, new Coordinates(0, 0), Orientation.Horizontal)));
+        var second = new Player("Ulysse", isBot: false,
+            Rounds.BoardWith(new ShipPlacement(ShipKind.Destroyer, new Coordinates(7, 7), Orientation.Horizontal)));
+        var game = new Game(GameMode.Local, first, second);
+
+        var shooter = game.CurrentPlayer;
+        var outcome = game.FireFromClient(new Coordinates(7, 7));
+
+        Assert.Equal(ShotResult.Hit, outcome.Result);
+        Assert.Same(shooter, game.CurrentPlayer);
+        Assert.Equal("Olivier", game.ViewForClient().ViewerName);
+    }
+
     /// <summary>
     /// C'est l'invariant de l'ADR 0003 vu sous l'angle du hot-seat : le serveur
     /// ne sert jamais deux flottes à la fois. Le tour de l'un ne peut pas révéler
@@ -75,14 +92,15 @@ public class LocalGameTests
     public void ALocalGame_PlaysThroughToAWinner()
     {
         var game = LocalGame();
+        var nextIndex = new Dictionary<string, int>();
 
-        foreach (var cell in Enumerable.Range(0, 200).Select(i => new Coordinates(i % 10, (i / 10) % 10)))
+        for (var turn = 0; turn < 400 && game.Status is GameStatus.InProgress; turn++)
         {
-            if (game.Status is GameStatus.Finished)
-            {
-                break;
-            }
+            var shooter = game.CurrentPlayer.Name;
+            var index = nextIndex.GetValueOrDefault(shooter);
+            nextIndex[shooter] = index + 1;
 
+            var cell = new Coordinates(index % 10, (index / 10) % 10);
             game.FireFromClient(cell);
         }
 

@@ -121,28 +121,14 @@ public class CustomFleetEndpointsTests(ApiFactory factory) : IClassFixture<ApiFa
         string? winner = null;
 
         // Avec trois cases par flotte, le bot gagne souvent le premier : la fin
-        // de partie doit etre guettee des deux cotes.
-        async Task<bool> EndsAsync(HttpResponseMessage response)
-        {
-            if (!response.IsSuccessStatusCode) return false;
-
-            var outcome = (await response.Content.ReadFromJsonAsync<ShotOutcomeResponse>())!;
-            if (!outcome.GameOver) return false;
-
-            winner = outcome.Winner;
-            return true;
-        }
-
+        // de partie peut tomber sur n'importe lequel des tirs de l'aller-retour.
         foreach (var index in Enumerable.Range(0, 100))
         {
-            if (await EndsAsync(await _client.PostAsJsonAsync(
-                    $"/games/{view.GameId}/shots", new FireRequest(index % 10, index / 10))))
-            {
-                break;
-            }
+            var round = await _client.PlayRoundAsync(view.GameId, index % 10, index / 10);
 
-            if (await EndsAsync(await _client.PostAsJsonAsync($"/games/{view.GameId}/bot-turn", new { })))
+            if (round[^1].GameOver)
             {
+                winner = round[^1].Winner;
                 break;
             }
         }

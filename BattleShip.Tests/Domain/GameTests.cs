@@ -4,17 +4,6 @@ namespace BattleShip.Tests.Domain;
 
 public class GameTests
 {
-    private static Board BoardWith(params ShipPlacement[] placements)
-    {
-        var board = new Board(BoardSize.Standard);
-        foreach (var placement in placements)
-        {
-            Assert.Null(board.Place(placement));
-        }
-
-        return board;
-    }
-
     /// <summary>
     /// Chaque joueur possede un unique torpilleur, sur des cases distinctes des
     /// deux grilles, pour qu'un tir puisse etre dirige vers un navire connu.
@@ -22,10 +11,10 @@ public class GameTests
     private static Game DuelOfTwoDestroyers()
     {
         var challenger = new Player("Challenger", isBot: false,
-            BoardWith(new ShipPlacement(ShipKind.Destroyer, new Coordinates(0, 0), Orientation.Horizontal)));
+            Rounds.BoardWith(new ShipPlacement(ShipKind.Destroyer, new Coordinates(0, 0), Orientation.Horizontal)));
 
         var defender = new Player("Defender", isBot: true,
-            BoardWith(new ShipPlacement(ShipKind.Destroyer, new Coordinates(7, 7), Orientation.Horizontal)));
+            Rounds.BoardWith(new ShipPlacement(ShipKind.Destroyer, new Coordinates(7, 7), Orientation.Horizontal)));
 
         return new Game(GameMode.Solo, challenger, defender);
     }
@@ -52,15 +41,14 @@ public class GameTests
     }
 
     [Fact]
-    public void Fire_OnAHit_StillPassesTheTurn()
+    public void Fire_OnAHit_KeepsTheTurn()
     {
-        // Notre regle : le tour passe toujours, touche ou non. Voir AGENTS.md § 3.
         var game = DuelOfTwoDestroyers();
         var shooter = game.CurrentPlayer;
 
         game.Fire(new Coordinates(7, 7));
 
-        Assert.NotSame(shooter, game.CurrentPlayer);
+        Assert.Same(shooter, game.CurrentPlayer);
     }
 
     [Fact]
@@ -145,7 +133,6 @@ public class GameTests
         var challenger = game.CurrentPlayer;
 
         game.Fire(new Coordinates(7, 7));   // challenger touche
-        game.Fire(new Coordinates(5, 5));   // defender manque
         var outcome = game.Fire(new Coordinates(8, 7));   // challenger coule
 
         Assert.Equal(ShotResult.Sunk, outcome.Result);
@@ -158,7 +145,6 @@ public class GameTests
     {
         var game = DuelOfTwoDestroyers();
         game.Fire(new Coordinates(7, 7));
-        game.Fire(new Coordinates(5, 5));
         game.Fire(new Coordinates(8, 7));
 
         var outcome = game.Fire(new Coordinates(1, 1));
@@ -211,11 +197,11 @@ public class GameTests
     public void ViewFor_ReportsTheShotsReceivedOnTheOwnBoard()
     {
         var game = DuelOfTwoDestroyers();
+        var challenger = game.CurrentPlayer;
         game.Fire(new Coordinates(3, 3));
         game.Fire(new Coordinates(0, 0));   // le defender touche le challenger
 
-        // Deux tirs acceptes : le tour est revenu au challenger.
-        var view = game.ViewFor(game.CurrentPlayer);
+        var view = game.ViewFor(challenger);
 
         Assert.Contains(new Coordinates(0, 0), view.ShotsReceived);
     }

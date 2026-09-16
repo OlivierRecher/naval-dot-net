@@ -75,9 +75,10 @@ public class GameEndpointsTests(ApiFactory factory) : IClassFixture<ApiFactory>
     [Fact]
     public async Task Fire_OnACellAlreadyTargeted_Returns409()
     {
+        // Le tour rendu au client est ce qui rend le refus discriminant : sans
+        // lui, un 409 dirait seulement « ce n'est pas a vous de jouer ».
         var game = await CreateGameAsync();
-        await _client.PostAsJsonAsync($"/games/{game.GameId}/shots", new FireRequest(4, 4));
-        await _client.PostAsJsonAsync($"/games/{game.GameId}/bot-turn", new { });
+        await _client.PlayRoundAsync(game.GameId, 4, 4);
 
         var response = await _client.PostAsJsonAsync($"/games/{game.GameId}/shots", new FireRequest(4, 4));
 
@@ -118,11 +119,12 @@ public class GameEndpointsTests(ApiFactory factory) : IClassFixture<ApiFactory>
         // Sans ce refus, le second POST /shots ferait tirer le bot sur une case
         // choisie par le client, et consommerait son tour. Voir ADR 0003.
         var game = await CreateGameAsync();
-        await _client.PostAsJsonAsync($"/games/{game.GameId}/shots", new FireRequest(4, 4));
+        var handOver = await _client.FireUntilTheBotHasTheHandAsync(game.GameId);
 
-        var response = await _client.PostAsJsonAsync($"/games/{game.GameId}/shots", new FireRequest(5, 5));
+        var response = await _client.PostAsJsonAsync($"/games/{game.GameId}/shots", new FireRequest(9, 9));
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.False(handOver.View.IsViewerTurn);
 
         var botTurn = await _client.PostAsJsonAsync($"/games/{game.GameId}/bot-turn", new { });
         Assert.Equal(HttpStatusCode.OK, botTurn.StatusCode);
@@ -144,7 +146,7 @@ public class GameEndpointsTests(ApiFactory factory) : IClassFixture<ApiFactory>
         // Le tour est passe au bot, mais le serveur ne sert jamais la vue d'un
         // bot au navigateur. Voir ADR 0003.
         var game = await CreateGameAsync();
-        await _client.PostAsJsonAsync($"/games/{game.GameId}/shots", new FireRequest(0, 0));
+        await _client.FireUntilTheBotHasTheHandAsync(game.GameId);
 
         var view = await _client.GetFromJsonAsync<GameViewResponse>($"/games/{game.GameId}");
 
@@ -163,20 +165,13 @@ public class GameEndpointsTests(ApiFactory factory) : IClassFixture<ApiFactory>
         {
             for (var row = 0; row < 10 && last?.GameOver is not true; row++)
             {
-                var shot = await _client.PostAsJsonAsync($"/games/{game.GameId}/shots", new FireRequest(column, row));
-                Assert.Equal(HttpStatusCode.OK, shot.StatusCode);
-
-                last = await shot.Content.ReadFromJsonAsync<ShotOutcomeResponse>();
+                var round = await _client.PlayRoundAsync(game.GameId, column, row);
                 fired.Add(new CoordinatesDto(column, row));
 
                 // La vue ne revele sur l'adversaire que les cases effectivement visees.
-                Assert.All(last!.View.ShotsFired, cell => Assert.Contains(cell.Target, fired));
+                Assert.All(round[0].View.ShotsFired, cell => Assert.Contains(cell.Target, fired));
 
-                if (last.GameOver) break;
-
-                var botTurn = await _client.PostAsJsonAsync($"/games/{game.GameId}/bot-turn", new { });
-                Assert.Equal(HttpStatusCode.OK, botTurn.StatusCode);
-                last = await botTurn.Content.ReadFromJsonAsync<ShotOutcomeResponse>();
+                last = round[^1];
             }
         }
 
@@ -194,11 +189,7 @@ public class GameEndpointsTests(ApiFactory factory) : IClassFixture<ApiFactory>
         {
             for (var row = 0; row < 10 && last?.GameOver is not true; row++)
             {
-                var shot = await _client.PostAsJsonAsync($"/games/{game.GameId}/shots", new FireRequest(column, row));
-                last = await shot.Content.ReadFromJsonAsync<ShotOutcomeResponse>();
-                if (last!.GameOver) break;
-                var botTurn = await _client.PostAsJsonAsync($"/games/{game.GameId}/bot-turn", new { });
-                last = await botTurn.Content.ReadFromJsonAsync<ShotOutcomeResponse>();
+                last = (await _client.PlayRoundAsync(game.GameId, column, row))[^1];
             }
         }
 

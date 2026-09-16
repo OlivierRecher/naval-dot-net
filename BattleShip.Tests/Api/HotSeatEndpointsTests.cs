@@ -32,17 +32,57 @@ public class HotSeatEndpointsTests(ApiFactory factory)
         Assert.Equal(5, view.OwnFleet.Count);
     }
 
+    /// <summary>
+    /// Balaie la grille jusqu'au premier tir du résultat demandé, en retenant qui
+    /// tirait. Le tireur change en cours de route : c'est précisément ce que les
+    /// deux tests suivants mesurent.
+    /// </summary>
+    private async Task<(string Shooter, ShotOutcomeResponse Outcome)> FireUntilAsync(Guid gameId, string result)
+    {
+        var shooter = (await _client.GetFromJsonAsync<GameViewResponse>($"/games/{gameId}"))!.ViewerName;
+
+        foreach (var index in Enumerable.Range(0, 100))
+        {
+            var outcome = await _client.FireAsync(gameId, index % 10, index / 10);
+
+            Assert.False(outcome.GameOver, $"la partie s'est terminée avant le premier « {result} »");
+
+            if (outcome.Result == result)
+            {
+                return (shooter, outcome);
+            }
+
+            shooter = outcome.View.ViewerName;
+        }
+
+        throw new InvalidOperationException($"aucun « {result} » en cent tirs.");
+    }
+
     [Fact]
-    public async Task Fire_InLocalMode_HandsTheViewToTheOtherHuman()
+    public async Task Fire_InLocalMode_OnAMiss_HandsTheViewToTheOtherHuman()
     {
         var game = await CreateLocalGameAsync();
 
-        var response = await _client.PostAsJsonAsync($"/games/{game.GameId}/shots", new FireRequest(0, 0));
+        var (shooter, outcome) = await FireUntilAsync(game.GameId, "Miss");
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotEqual(shooter, outcome.View.ViewerName);
+        Assert.True(outcome.View.IsViewerTurn);
+    }
 
-        var outcome = await response.Content.ReadFromJsonAsync<ShotOutcomeResponse>();
-        Assert.Equal("Ulysse", outcome!.View.ViewerName);
+    /// <summary>
+    /// Le pendant du test précédent, et le cas qui bloquait l'interface : sur une
+    /// touche le tireur garde la main, donc la vue ne doit pas changer de joueur.
+    /// Armer la passation ici laisserait le navigateur attendre un adversaire que
+    /// le serveur n'appellera jamais. Voir AGENTS.md § 3 et l'ADR 0014.
+    /// </summary>
+    [Fact]
+    public async Task Fire_InLocalMode_OnAHit_KeepsTheViewOnTheSameHuman()
+    {
+        var game = await CreateLocalGameAsync();
+
+        var (shooter, outcome) = await FireUntilAsync(game.GameId, "Hit");
+
+        Assert.Equal(shooter, outcome.View.ViewerName);
         Assert.True(outcome.View.IsViewerTurn);
     }
 
@@ -59,9 +99,7 @@ public class HotSeatEndpointsTests(ApiFactory factory)
 
         for (var turn = 0; turn < 12; turn++)
         {
-            var response = await _client.PostAsJsonAsync(
-                $"/games/{game.GameId}/shots", new FireRequest(turn % 10, turn / 10));
-            var view = (await response.Content.ReadFromJsonAsync<ShotOutcomeResponse>())!.View;
+            var view = (await _client.FireAsync(game.GameId, turn % 10, turn / 10)).View;
 
             Assert.Equal(5, view.OwnFleet.Count);
 

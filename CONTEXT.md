@@ -19,7 +19,7 @@ choses sont représentées ni stockées — uniquement ce que les mots désignen
 | Difficulté | `BotDifficulty` | `Random`, `HuntTarget` ou `HuntTargetParity`. Fixée à la création de la partie, elle ne change plus. Une partie `Local` en porte une par construction, sans objet : elle n'oppose aucun bot. |
 | Stratégie | `BotStrategy` | Le comportement qui choisit la case visée par un bot. Une difficulté nomme une stratégie ; la fabrique `IBotStrategyFactory` est le seul endroit où le nom rencontre le code. |
 | Joueur courant | `CurrentPlayer` | Le joueur à qui c'est le tour. Seul lui peut tirer. |
-| Tour | `Turn` | Le droit de tirer une fois. Il passe après chaque tir accepté, touché ou non. |
+| Tour | `Turn` | Le droit de tirer. Il passe au coup manqué, et **seulement** là : sur une touche — coulé compris — le tireur rejoue. Voir ADR 0014. |
 | Vainqueur | `Winner` | Le joueur dont l'adversaire a perdu toute sa flotte. N'existe que si le statut est `Finished`. |
 
 ### Comportement des bots

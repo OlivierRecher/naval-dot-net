@@ -61,7 +61,7 @@ public class BotDifficultyEndpointsTests(ApiFactory factory)
             "/games", new CreateGameRequest("Olivier", 10, 10, "Solo", "HuntTargetParity", "Random"));
         var view = await created.Content.ReadFromJsonAsync<GameViewResponse>();
 
-        await client.PostAsJsonAsync($"/games/{view!.GameId}/shots", new FireRequest(0, 0));
+        await client.FireUntilTheBotHasTheHandAsync(view!.GameId);
         var botTurn = await client.PostAsJsonAsync($"/games/{view.GameId}/bot-turn", new { });
 
         Assert.Equal(HttpStatusCode.OK, botTurn.StatusCode);

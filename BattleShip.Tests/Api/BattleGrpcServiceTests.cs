@@ -35,6 +35,32 @@ public class BattleGrpcServiceTests(ApiFactory factory) : IClassFixture<ApiFacto
         return new Battle.BattleClient(channel);
     }
 
+    /// <summary>
+    /// Le pendant gRPC du balayage HTTP : le seul moment ou la main passe au bot
+    /// est le premier coup manque. Voir AGENTS.md § 3.
+    /// </summary>
+    private static async Task FireUntilTheBotHasTheHandAsync(Battle.BattleClient grpc, Guid gameId)
+    {
+        foreach (var index in Enumerable.Range(0, 100))
+        {
+            var outcome = await grpc.FireAsync(new FireCommand
+            {
+                GameId = gameId.ToString(),
+                Column = index % 10,
+                Row = index / 10
+            });
+
+            Assert.False(outcome.GameOver, "la partie s'est terminée avant que la main ne passe au bot");
+
+            if (outcome.Result is "Miss")
+            {
+                return;
+            }
+        }
+
+        throw new InvalidOperationException("aucun coup manqué en cent tirs.");
+    }
+
     private async Task<Guid> CreateGameAsync(HttpClient client)
     {
         var response = await client.PostAsJsonAsync("/games", new CreateGameRequest("Olivier", 10, 10, "Solo", "Random", "Random"));
@@ -117,7 +143,10 @@ public class BattleGrpcServiceTests(ApiFactory factory) : IClassFixture<ApiFacto
         var grpc = CreateGrpcClient();
 
         await grpc.FireAsync(new FireCommand { GameId = gameId.ToString(), Column = 3, Row = 3 });
-        await http.PostAsJsonAsync($"/games/{gameId}/bot-turn", new { });
+
+        // Rendre la main avant de rejouer la case : sinon le refus obtenu serait
+        // « ce n'est pas a vous de jouer », qui porte le meme statut gRPC.
+        await http.PlayBotTurnsAsync(gameId);
 
         var error = await Assert.ThrowsAsync<RpcException>(() =>
             grpc.FireAsync(new FireCommand
@@ -139,14 +168,16 @@ public class BattleGrpcServiceTests(ApiFactory factory) : IClassFixture<ApiFacto
         var gameId = await CreateGameAsync(http);
         var grpc = CreateGrpcClient();
 
-        await grpc.FireAsync(new FireCommand { GameId = gameId.ToString(), Column = 3, Row = 3 });
+        // La main ne passe qu'au coup manque : tirer une fois ne suffit plus a
+        // mettre la partie dans l'etat que ce test interroge.
+        await FireUntilTheBotHasTheHandAsync(grpc, gameId);
 
         var error = await Assert.ThrowsAsync<RpcException>(() =>
             grpc.FireAsync(new FireCommand
             {
                 GameId = gameId.ToString(),
-                Column = 4,
-                Row = 4
+                Column = 9,
+                Row = 9
             }).ResponseAsync);
 
         Assert.Equal(StatusCode.FailedPrecondition, error.StatusCode);
@@ -165,7 +196,7 @@ public class BattleGrpcServiceTests(ApiFactory factory) : IClassFixture<ApiFacto
         var gameId = await CreateGameAsync(http);
 
         await CreateGrpcClient().FireAsync(new FireCommand { GameId = gameId.ToString(), Column = 6, Row = 2 });
-        await http.PostAsJsonAsync($"/games/{gameId}/bot-turn", new { });
+        await http.PlayBotTurnsAsync(gameId);
 
         var overHttp = await http.PostAsJsonAsync($"/games/{gameId}/shots", new FireRequest(6, 2));
 
