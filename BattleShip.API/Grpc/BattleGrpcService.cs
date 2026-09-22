@@ -50,13 +50,15 @@ public sealed class BattleGrpcService(IGameRepository repository) : Battle.Battl
 
         repository.Save(game);
 
+        var projection = game.ProjectForClient();
+
         return Task.FromResult(new ShotOutcome
         {
             Column = outcome.Target.Column,
             Row = outcome.Target.Row,
             Result = outcome.Result.ToString(),
-            GameOver = game.Status is GameStatus.Finished,
-            Winner = game.Winner?.Name ?? string.Empty
+            GameOver = projection.IsOver,
+            Winner = projection.WinnerName ?? string.Empty
         });
     }
 

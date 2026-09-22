@@ -11,6 +11,14 @@ public readonly record struct RevealedCell(Coordinates Target, ShotResult Result
 public readonly record struct ShipToPlace(ShipKind Kind, int Size);
 
 /// <summary>
+/// Tout ce que le serveur sert au navigateur après une transition, pris en
+/// <b>une seule fois</b> sous le verrou de la partie. Lire la vue, le statut et
+/// le vainqueur séparément laisse la réponse se contredire — l'échange de tour
+/// est une affectation de tuple, donc non atomique. Voir ADR 0008 et 0012.
+/// </summary>
+public sealed record GameProjection(GameView View, bool IsOver, string? WinnerName);
+
+/// <summary>
 /// Ce que le viewer — le joueur decrit par la vue — a le droit de voir. Ce
 /// n'est pas toujours le joueur courant : <see cref="Game.ViewForClient"/>
 /// decrit l'humain meme quand le bot doit jouer. Le type ne porte aucun membre

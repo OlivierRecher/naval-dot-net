@@ -216,17 +216,38 @@ public sealed class Game
     {
         lock (_gate)
         {
-            // Pendant le placement, le viewer n'est pas le joueur courant mais
-            // celui dont on attend la flotte : c'est lui qui est devant l'ecran.
-            // Sans cela, en mode Local, le second joueur recevrait une vue du
-            // premier, sans rien a poser et sans moyen d'avancer.
-            if (Status is GameStatus.AwaitingFleet && PlayerAwaitingFleet() is { } placer)
-            {
-                return ViewLocked(placer);
-            }
-
-            return ViewLocked(_current.IsBot ? _waiting : _current);
+            return ViewForClientLocked();
         }
+    }
+
+    /// <summary>
+    /// La vue <b>et</b> l'issue, sous une seule prise du verrou. Un lecteur qui
+    /// les demande separement observe trois instants : la reponse peut annoncer
+    /// une partie en cours avec une vue terminee. Voir ADR 0008.
+    /// </summary>
+    public GameProjection ProjectForClient()
+    {
+        lock (_gate)
+        {
+            return new GameProjection(
+                ViewForClientLocked(),
+                Status is GameStatus.Finished,
+                Winner?.Name);
+        }
+    }
+
+    private GameView ViewForClientLocked()
+    {
+        // Pendant le placement, le viewer n'est pas le joueur courant mais
+        // celui dont on attend la flotte : c'est lui qui est devant l'ecran.
+        // Sans cela, en mode Local, le second joueur recevrait une vue du
+        // premier, sans rien a poser et sans moyen d'avancer.
+        if (Status is GameStatus.AwaitingFleet && PlayerAwaitingFleet() is { } placer)
+        {
+            return ViewLocked(placer);
+        }
+
+        return ViewLocked(_current.IsBot ? _waiting : _current);
     }
 
     /// <summary>

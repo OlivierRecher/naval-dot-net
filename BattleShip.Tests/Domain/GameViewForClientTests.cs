@@ -26,6 +26,46 @@ public class GameViewForClientTests
             .Select(index => new Coordinates(index % 10, index / 10))
             .First(cell => !FleetOf(player).Contains(cell));
 
+    /// <summary>
+    /// L'issue servie a cote de la vue doit decrire la meme partie qu'elle. La
+    /// garantie de simultaneite, elle, est structurelle — une seule prise du
+    /// verrou — et n'est pas atteignable par un test : voir la PR qui introduit
+    /// <see cref="Game.ProjectForClient"/>.
+    /// </summary>
+    [Fact]
+    public void ProjectForClient_OnAFinishedGame_DescribesTheSameGameAsItsView()
+    {
+        var placement = new ShipPlacement(ShipKind.Destroyer, new Coordinates(0, 0), Orientation.Horizontal);
+
+        var human = new Player("Humain", isBot: false, Rounds.BoardWith(placement));
+        var bot = new Player("Bot", isBot: true, Rounds.BoardWith(placement));
+        var game = new Game(GameMode.Solo, human, bot);
+
+        game.FireFromClient(new Coordinates(0, 0));
+        game.FireFromClient(new Coordinates(1, 0));
+
+        var projection = game.ProjectForClient();
+
+        Assert.Equal(GameStatus.Finished, game.Status);
+        Assert.True(projection.IsOver);
+        Assert.Equal(GameStatus.Finished, projection.View.Status);
+        Assert.Equal("Humain", projection.WinnerName);
+        Assert.Equal(projection.WinnerName, projection.View.WinnerName);
+    }
+
+    [Fact]
+    public void ProjectForClient_WhileTheGameRuns_AnnouncesNoWinner()
+    {
+        var game = SoloGameWhereTheHumanOpens();
+
+        var projection = game.ProjectForClient();
+
+        Assert.False(projection.IsOver);
+        Assert.Null(projection.WinnerName);
+        Assert.Equal(GameStatus.InProgress, projection.View.Status);
+        Assert.Equal(projection.View.WinnerName, projection.WinnerName);
+    }
+
     [Fact]
     public void ViewForClient_WhileItIsTheHumanTurn_DescribesTheHuman()
     {

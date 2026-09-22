@@ -28,12 +28,12 @@ internal static class GameMapper
         [.. view.Fleet.Select(ship => new ShipToPlaceDto(ship.Kind.ToString(), ship.Size))],
         view.WinnerName);
 
-    public static ShotOutcomeResponse ToResponse(this FireOutcome outcome, Game game) => new(
+    public static ShotOutcomeResponse ToResponse(this FireOutcome outcome, GameProjection projection) => new(
         outcome.Target.ToDto(),
         outcome.Result.ToString(),
-        game.Status is GameStatus.Finished,
-        game.Winner?.Name,
-        game.ViewForClient().ToResponse());
+        projection.IsOver,
+        projection.WinnerName,
+        projection.View.ToResponse());
 
     public static GameSummaryResponse ToResponse(this GameSummary summary) => new(
         summary.Id,
