@@ -120,6 +120,17 @@ public static class BotDifficultyCatalog
 }
 
 /// <summary>
+/// Les bornes de la grille, partagées pour la même raison que les catalogues :
+/// le serveur les impose, le front les annonce. Le contrôle côté navigateur
+/// reste un confort — la garantie est le 400 de FluentValidation.
+/// </summary>
+public static class BoardBounds
+{
+    public const int MinSide = 8;
+    public const int MaxSide = 20;
+}
+
+/// <summary>
 /// Les états, modes, résultats de tir et orientations que le contrat transporte
 /// sous forme de <b>noms</b>. Ils vivent ici pour la même raison que
 /// <see cref="BotDifficultyCatalog"/> : l'API les écrit, le front les lit, et les

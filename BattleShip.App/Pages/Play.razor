@@ -40,7 +40,13 @@
         }
 
         <label class="form-label" for="side">Taille de la grille</label>
-        <input id="side" type="number" min="8" max="20" class="form-control mb-3" @bind="_side" />
+        <input id="side" type="number" min="@BoardBounds.MinSide" max="@BoardBounds.MaxSide"
+               class="form-control" @bind="_side" />
+        @if (SideProblem is { } sideProblem)
+        {
+            <p class="form-text text-danger">@sideProblem</p>
+        }
+        <div class="mb-3"></div>
 
         @if (_mode == GameModeNames.Solo)
         {
@@ -89,7 +95,7 @@
             <option value="Manual">Manuel — vous posez chaque navire</option>
         </select>
 
-        <button class="btn btn-primary" @onclick="StartAsync" disabled="@(Session.IsBusy || FleetProblem is not null)">
+        <button class="btn btn-primary" @onclick="StartAsync" disabled="@(Session.IsBusy || SetupProblem is not null)">
             @(Session.IsBusy ? "Création…" : "Lancer la partie")
         </button>
     </div>
@@ -317,6 +323,18 @@ else
 
     private int FleetCellCount =>
         _fleet.Sum(entry => entry.Value * ShipCatalog.All.First(ship => ship.Name == entry.Key).Size);
+
+    /// <summary>
+    /// <c>min</c> et <c>max</c> d'un <c>input type="number"</c> n'empêchent ni la
+    /// saisie ni le collage d'une valeur hors bornes, et il n'y a pas de
+    /// <c>form</c> : sans ce contrôle, le bouton reste actif et le joueur
+    /// n'apprend la borne qu'au refus du serveur.
+    /// </summary>
+    private string? SideProblem => _side < BoardBounds.MinSide || _side > BoardBounds.MaxSide
+        ? $"La grille va de {BoardBounds.MinSide} à {BoardBounds.MaxSide} cases de côté."
+        : null;
+
+    private string? SetupProblem => SideProblem ?? FleetProblem;
 
     /// <summary>
     /// Les mêmes bornes que le serveur, pour dire tout de suite ce qu'il

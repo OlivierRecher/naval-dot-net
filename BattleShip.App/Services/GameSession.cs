@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using BattleShip.Grpc;
 using BattleShip.Models;
 using Grpc.Core;
@@ -80,7 +81,7 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
             if (!response.IsSuccessStatusCode)
             {
-                Failure = $"Création refusée par le serveur (HTTP {(int)response.StatusCode}).";
+                Failure = await RefusalAsync(response, "Création refusée par le serveur");
                 return;
             }
 
@@ -211,7 +212,10 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
             if (!response.IsSuccessStatusCode)
             {
-                Failure = $"Placement refusé par le serveur (HTTP {(int)response.StatusCode}). Votre flotte n'est pas posée.";
+                Failure = await RefusalAsync(
+                    response,
+                    "Placement refusé par le serveur",
+                    "Votre flotte n'est pas posée.");
                 return;
             }
 
@@ -357,7 +361,10 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
             if (!response.IsSuccessStatusCode)
             {
-                Failure = $"Le bot n'a pas pu jouer (HTTP {(int)response.StatusCode}). Votre tir est enregistré ; relancez le tour du bot.";
+                Failure = await RefusalAsync(
+                    response,
+                    "Le bot n'a pas pu jouer",
+                    "Votre tir est enregistré ; relancez le tour du bot.");
                 break;
             }
 
@@ -384,6 +391,57 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
             ? $" — Le bot tire en {shots[0]}"
             : $" — Le bot enchaîne {shots.Count} tirs : {string.Join(" ", shots)}";
     }
+
+    /// <summary>
+    /// Le serveur redige des refus precis, en francais, qui nomment les valeurs
+    /// acceptees. N'afficher que le code HTTP les jette : le joueur lit « 400 »
+    /// et n'apprend nulle part ce qu'on attendait de lui. Le chemin gRPC, lui,
+    /// affiche deja le message tel que le serveur l'a ecrit.
+    /// </summary>
+    private static async Task<string> RefusalAsync(
+        HttpResponseMessage response,
+        string what,
+        string? consequence = null)
+    {
+        // Un tiret plutot qu'un deux-points : les messages du serveur en portent
+        // deja un, et « refuse par le serveur : X : Y » se lit mal.
+        var reason = await ServerReasonAsync(response) ?? $"HTTP {(int)response.StatusCode}.";
+
+        return consequence is null ? $"{what} — {reason}" : $"{what} — {reason} {consequence}";
+    }
+
+    /// <summary>
+    /// Deux formes possibles : <c>detail</c> pour un refus redige par le domaine,
+    /// <c>errors</c> pour un refus de FluentValidation. Un corps illisible n'est
+    /// pas une raison de ne rien afficher : l'appelant retombe sur le code HTTP.
+    /// </summary>
+    private static async Task<string?> ServerReasonAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            if (await response.Content.ReadFromJsonAsync<ProblemResponse>() is not { } problem)
+            {
+                return null;
+            }
+
+            var messages = (problem.Errors?.Values.SelectMany(values => values) ?? [])
+                .Concat(problem.Detail is null ? [] : [problem.Detail])
+                .Where(message => !string.IsNullOrWhiteSpace(message))
+                .ToList();
+
+            return messages.Count is 0 ? null : string.Join(" ", messages);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    private sealed record ProblemResponse(string? Detail, Dictionary<string, string[]>? Errors);
 
     private async Task RefreshAsync(Guid gameId) =>
         View = await http.GetFromJsonAsync<GameViewResponse>($"games/{gameId}");
