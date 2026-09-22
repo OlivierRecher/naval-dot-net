@@ -44,8 +44,17 @@ vaut mieux qu'une conformité non réfléchie.
 
 ## Conséquences
 - Un oubli de validation devient impossible sur un endpoint qui déclare un
-  corps de requête typé : c'est le mécanisme qui garantit la règle, pas la
-  vigilance.
+  corps de requête typé.
+  **Précision du 2026-09-22** : ce n'était pas vrai du mécanisme seul. Le filtre
+  HTTP est **opt-in par endpoint** — omettre `.WithValidation<T>()` laisse
+  l'endpoint passer sans validation, exactement l'oubli silencieux reproché à
+  l'option (a), simplement plus court à écrire. Le filtre supprimait la
+  *répétition*, pas l'*oubliabilité*. Côté gRPC, l'intercepteur est bien
+  automatique, mais il se tait quand aucun `IValidator<TRequest>` n'est
+  enregistré. Ce qui rend la promesse vraie, ce sont les trois tests de
+  `ValidationCoverageTests`, qui parcourent les routes réellement construites :
+  tout corps typé doit porter son filtre et avoir son validateur, et tout
+  message gRPC entrant doit avoir le sien.
 - Réponse `ValidationProblem` uniforme, donc un seul format d'erreur à gérer
   côté front.
 - Le filtre manipule le type de requête de façon générique. **Ce code doit être
@@ -65,6 +74,16 @@ vaut mieux qu'une conformité non réfléchie.
 - Contrôle de mutation : retirer l'enregistrement du filtre doit faire échouer
   ces deux tests. Tant que cette manipulation n'a pas été faite, on ne sait pas
   si les tests passent grâce au filtre ou par accident.
+- `ValidationCoverageTests` couvre l'oubli **futur**, que les tests ci-dessus ne
+  voient pas : ils vérifient les quatre endpoints existants, pas le cinquième.
+  Contrôles de mutation exécutés le 2026-09-22 — `.WithValidation<PlaceFleetRequest>()`
+  retiré de l'endpoint de flotte, puis `FireCommandValidator` supprimé :
+  `EveryEndpointDeclaringATypedBody_DeclaresItsValidationFilter` et
+  `EveryGrpcRequest_HasAValidatorRegistered` rougissent respectivement.
+- Le filtre ne laissant aucune trace inspectable une fois la route construite,
+  `WithValidation<T>()` dépose une métadonnée `ValidatedBody(typeof(T))`. Elle
+  n'existe que pour être observée par ce test : sans elle, la promesse resterait
+  invérifiable de l'extérieur.
 
 À réexaminer si le filtre générique s'avérait plus difficile à expliquer qu'à
 écrire : l'option (a), verbeuse mais limpide, resterait acceptable.
