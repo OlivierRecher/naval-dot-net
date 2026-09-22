@@ -52,18 +52,43 @@ séparées, donc deux appels concurrents à `/bot-turn` pouvaient jouer deux tou
 `Shots` renvoie désormais une copie : sans cela, l'appelant énumère la liste
 vivante hors du verrou.
 
+**Complément du 2026-09-22 — la frontière est tenue par le type.** `Board.Place`
+et `Board.Receive` étaient publics, et `Game.CurrentPlayer` / `Game.Opponent` le
+sont aussi : `game.Opponent.Board.Receive(new Coordinates(3, 4))` compilait
+depuis l'API comme depuis le front. Un tir posé là ne prenait pas `_gate`,
+n'était pas écrit au journal, et ne mettait à jour ni `Status` ni `Winner` — sur
+une persistance par rejeu (ADR 0012), un tir perdu au redémarrage, et un
+`AllShipsSunk` vrai pendant que `Status` dit encore `InProgress`.
+
+La barrière existait pourtant un cran plus bas : `Ship.RecordHit` et
+`Ship.Occupies` sont `internal`. Elle manquait sur la grille — une asymétrie,
+pas un arbitrage : aucun ADR ne la mentionnait.
+
+Les deux méthodes sont désormais `internal`. Le seul appelant légitime hors du
+domaine, `SqliteGameRepository.PlayerFrom`, passe par un constructeur
+`Board(BoardSize, IReadOnlyList<ShipPlacement>)` qui pose la flotte entière ou
+lève. `[assembly: InternalsVisibleTo("BattleShip.Tests")]` laisse `BoardTests`
+exercer les règles de placement et de résolution sans monter une partie : c'est
+un attribut, pas une référence, donc la règle « zéro dépendance » d'`AGENTS.md`
+§ 4 tient toujours.
+
+Vérification par compilation : les deux appels ci-dessus, écrits dans
+`BattleShip.API`, sont refusés en `error CS1061`.
+
 ## Conséquences
 - `Domain` ne gagne aucune dépendance : `System.Threading.Lock` est dans la BCL.
   La règle « zéro dépendance » d'`AGENTS.md` § 4 reste tenue.
 - Le verrou est **par partie**, pas global : deux parties différentes ne se
   bloquent pas.
 - Les sections critiques ne contiennent ni E/S ni `await`.
-- **Limite assumée** : la réponse HTTP est assemblée *après* la fin du verrou
-  (`GameMapper.ToResponse` relit `game.Status` et `game.Winner`). Sous
-  concurrence réelle, le corps de réponse peut donc refléter un état légèrement
-  postérieur au tir qu'il décrit. La transition, elle, reste atomique. Rendre la
-  requête entière atomique supposerait de faire remonter le verrou jusqu'au
-  mapping, ce qui exposerait un détail d'implémentation hors du domaine.
+- **Limite levée le 2026-09-22** : la réponse était assemblée *après* la fin du
+  verrou — `GameMapper.ToResponse` relisait `game.Status` puis `game.Winner` puis
+  la vue, soit trois instants, donc un corps capable de se contredire
+  (`gameOver: false` avec une vue `Finished`). `Game.ProjectForClient()` rend
+  maintenant la vue **et** l'issue sous une seule prise du verrou, et les deux
+  transports y passent. Ce qui reste vrai : la requête entière n'est pas atomique
+  — le tir et la réponse sont deux instants — mais la réponse, elle, n'en décrit
+  plus qu'un.
 - Le jour de la bascule vers SQLite (ADR 0004, item 5 du backlog), ce verrou
   devient insuffisant : il ne couvre qu'un processus. Il faudra une transaction.
 

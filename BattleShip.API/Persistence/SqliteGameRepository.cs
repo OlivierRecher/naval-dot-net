@@ -217,31 +217,18 @@ public sealed class SqliteGameRepository(BattleShipDbContext db, GameCache cache
     /// <summary>
     /// Un placement refusé ferait <b>disparaître le navire</b> : la flotte
     /// rechargée serait plus courte que celle qui a été jouée, donc la partie
-    /// pourrait se terminer sur un autre vainqueur, sans trace. Même politique
-    /// que le journal non rejouable — on refuse, on ne reconstruit pas à peu
-    /// près. <see cref="Load"/> transforme cette exception en 409. Voir ADR 0014.
+    /// pourrait se terminer sur un autre vainqueur, sans trace. Le constructeur
+    /// de <see cref="Board"/> lève plutôt que de poser à moitié, et
+    /// <see cref="Load"/> transforme cette exception en 409. Voir ADR 0014.
     /// </summary>
-    private static Player PlayerFrom(PlayerRecord record, BoardSize size)
-    {
-        var board = new Board(size);
-
-        foreach (var ship in record.Ships)
-        {
-            var placement = new ShipPlacement(
-                EnumNames<ShipKind>.Parse(ship.Kind),
-                new Coordinates(ship.Column, ship.Row),
-                EnumNames<Orientation>.Parse(ship.Orientation));
-
-            if (board.Place(placement) is { } error)
-            {
-                throw new InvalidOperationException(
-                    $"Placement incohérent : le navire {placement.Kind} en {placement.Origin} " +
-                    $"est refusé ({error}) au rechargement de la partie {record.GameId}.");
-            }
-        }
-
-        return new Player(record.Name, record.IsBot, board, record.Id);
-    }
+    private static Player PlayerFrom(PlayerRecord record, BoardSize size) => new(
+        record.Name,
+        record.IsBot,
+        new Board(size, [.. record.Ships.Select(ship => new ShipPlacement(
+            EnumNames<ShipKind>.Parse(ship.Kind),
+            new Coordinates(ship.Column, ship.Row),
+            EnumNames<Orientation>.Parse(ship.Orientation)))]),
+        record.Id);
 }
 
 /// <summary>
