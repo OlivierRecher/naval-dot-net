@@ -119,6 +119,51 @@ public static class BotDifficultyCatalog
         All.FirstOrDefault(option => option.Name == name)?.Summary ?? string.Empty;
 }
 
+/// <summary>
+/// Les états, modes, résultats de tir et orientations que le contrat transporte
+/// sous forme de <b>noms</b>. Ils vivent ici pour la même raison que
+/// <see cref="BotDifficultyCatalog"/> : l'API les écrit, le front les lit, et les
+/// deux projets ne se référencent pas. Un test interdit qu'ils divergent des
+/// énumérations du domaine — sans lui, renommer une valeur compile des deux
+/// côtés et casse l'écran en silence.
+/// </summary>
+public static class GameStatusNames
+{
+    public const string AwaitingFleet = "AwaitingFleet";
+    public const string InProgress = "InProgress";
+    public const string Finished = "Finished";
+
+    public static IReadOnlyList<string> All { get; } = [AwaitingFleet, InProgress, Finished];
+}
+
+/// <inheritdoc cref="GameStatusNames"/>
+public static class GameModeNames
+{
+    public const string Solo = "Solo";
+    public const string Local = "Local";
+
+    public static IReadOnlyList<string> All { get; } = [Solo, Local];
+}
+
+/// <inheritdoc cref="GameStatusNames"/>
+public static class ShotResultNames
+{
+    public const string Miss = "Miss";
+    public const string Hit = "Hit";
+    public const string Sunk = "Sunk";
+
+    public static IReadOnlyList<string> All { get; } = [Miss, Hit, Sunk];
+}
+
+/// <inheritdoc cref="GameStatusNames"/>
+public static class OrientationNames
+{
+    public const string Horizontal = "Horizontal";
+    public const string Vertical = "Vertical";
+
+    public static IReadOnlyList<string> All { get; } = [Horizontal, Vertical];
+}
+
 public sealed record ShipOption(string Name, string Label, int Size);
 
 /// <summary>
