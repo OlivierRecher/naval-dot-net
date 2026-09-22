@@ -155,11 +155,38 @@ public sealed class SqliteGameRepository(BattleShipDbContext db, GameCache cache
                 [.. record.Shots.OrderBy(shot => shot.Ordinal).Select(shot => new Coordinates(shot.Column, shot.Row))],
                 FleetFrom(record.Fleet));
 
+            RefuseIfShootersDiverge(record, game);
+
             return cache.Remember(game);
         }
         catch (InvalidOperationException error)
         {
             throw new UnreplayableJournalException(record.Id, error);
+        }
+    }
+
+    /// <summary>
+    /// Le rejeu ne reçoit que des coordonnées : c'est la règle du tour en vigueur
+    /// qui décide <b>qui</b> tire, donc <b>quelle grille</b> encaisse. Une partie
+    /// écrite sous une autre règle n'est refusée par le rejeu que si le tir
+    /// divergent retombe sur une case déjà prise — sinon elle se reconstruit,
+    /// autre, en silence. <c>ShooterId</c> est écrit à chaque tir : le comparer au
+    /// tireur déduit rend le refus vérifié au lieu d'être attrapé par hasard.
+    /// Voir ADR 0014.
+    /// </summary>
+    private static void RefuseIfShootersDiverge(GameRecord record, Game game)
+    {
+        var stored = record.Shots.OrderBy(shot => shot.Ordinal).ToList();
+        var replayed = game.Shots;
+
+        for (var ordinal = 0; ordinal < stored.Count; ordinal++)
+        {
+            if (stored[ordinal].ShooterId != replayed[ordinal].ShooterId)
+            {
+                throw new InvalidOperationException(
+                    $"Journal incohérent : le tir n°{ordinal} a été joué par {stored[ordinal].ShooterId}, " +
+                    $"le rejeu l'attribue à {replayed[ordinal].ShooterId}.");
+            }
         }
     }
 

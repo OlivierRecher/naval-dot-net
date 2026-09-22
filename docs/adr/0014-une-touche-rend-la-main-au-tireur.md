@@ -127,6 +127,15 @@ une suite stable sur 17 exécutions est ce qui remplace ici un tirage fixe.
 | Touche, humain et bot | Le tireur garde la main, domaine et API |
 | Hot-seat sur touche | La vue reste au tireur ; sur raté elle passe à l'autre |
 | Journal écrit sous l'ancienne règle | Refusé, 409, message nommant la cause |
+| Garde du tireur retirée | `AJournalWhoseShooterDivergesFromTheReplay_IsRefused` rouge |
+
+**Complément du 2026-09-22.** Le refus ci-dessus n'était acquis que lorsque le
+tir divergent retombait sur une case **déjà prise**. Sur une case libre, le rejeu
+l'acceptait : le tir changeait de tireur et de grille, et la partie rechargée
+n'était plus celle qui avait été jouée — sans exception ni 409. `ShooterId` est
+écrit à chaque tir et n'était relu par personne ; il est désormais comparé au
+tireur déduit au rechargement. Le refus devient vérifié au lieu d'être attrapé
+par hasard, et la colonne cesse d'être du poids mort.
 
 À réexaminer si une partie devait survivre à un changement de règle : il faudrait
 alors l'option 3, et une colonne de version.
