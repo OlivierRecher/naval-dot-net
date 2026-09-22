@@ -25,7 +25,27 @@
     border: 1px solid #b9c6d4;
     border-radius: 3px;
     background: #eef3f8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
 }
+
+/*
+  Touche et coule ne different que sur l'axe rouge-vert : une deuteranopie ou
+  une protanopie les confond, et c'est justement l'information qui dit s'il faut
+  continuer a traquer un navire. Le repere non colore existe deja dans le projet
+  — .fleet .sunk combine line-through et couleur — il manquait sur la grille.
+*/
+.cell-hit::after,
+.cell-sunk::after {
+    color: #ffffff;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.cell-hit::after  { content: "•"; }
+.cell-sunk::after { content: "\00d7"; }
 
 .cell-unknown:not(:disabled):hover {
     background: #cfe0f2;

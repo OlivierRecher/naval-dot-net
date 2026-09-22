@@ -155,7 +155,8 @@ else if (Session.IsPlacingFleet)
                         <button type="button"
                                 class="cell @(_takenCells.Contains(cell) ? "cell-ship" : "cell-empty")"
                                 disabled="@(Session.IsBusy || NextShip is null)"
-                                title="@Label(cell)"
+                                title="@PlacementCellLabel(cell)"
+                                aria-label="@PlacementCellLabel(cell)"
                                 @onclick="() => PlaceAt(cell)">
                         </button>
                     }
@@ -248,7 +249,8 @@ else
                         <button type="button"
                                 class="cell @EnemyCellClass(known)"
                                 disabled="@(!Session.CanFire || known is not null)"
-                                title="@Label(target)"
+                                title="@EnemyCellLabel(target, known)"
+                                aria-label="@EnemyCellLabel(target, known)"
                                 @onclick="() => FireAsync(target)">
                         </button>
                     }
@@ -264,7 +266,10 @@ else
                     for (var column = 0; column < Session.View.Columns; column++)
                     {
                         var cell = new CoordinatesDto(column, row);
-                        <div class="cell @OwnCellClass(cell)" title="@Label(cell)"></div>
+                        <div class="cell @OwnCellClass(cell)"
+                             title="@OwnCellLabel(cell)"
+                             role="img"
+                             aria-label="@OwnCellLabel(cell)"></div>
                     }
                 }
             </div>
@@ -497,6 +502,36 @@ else
     }
 
     private static string Label(CoordinatesDto cell) => $"{(char)('A' + cell.Column)}{cell.Row + 1}";
+
+    /// <summary>
+    /// L'etat d'une case ne doit pas tenir a sa seule couleur : un lecteur
+    /// d'ecran n'annoncait que « bouton A1 », et « bouton A1 desactive » aussi
+    /// bien pour une case deja visee que pour un tour qui n'est pas le sien.
+    /// Le libelle porte donc l'etat, en plus du repere visuel ajoute au CSS.
+    /// </summary>
+    private string EnemyCellLabel(CoordinatesDto cell, string? known) => known switch
+    {
+        ShotResultNames.Miss => $"{Label(cell)} — à l'eau",
+        ShotResultNames.Hit => $"{Label(cell)} — touché",
+        ShotResultNames.Sunk => $"{Label(cell)} — coulé",
+        not null => $"{Label(cell)} — {known}",
+        _ when !Session.CanFire => $"{Label(cell)} — non visée, ce n'est pas à vous de jouer",
+        _ => $"{Label(cell)} — non visée"
+    };
+
+    private string OwnCellLabel(CoordinatesDto cell)
+    {
+        if (_sunkCells.Contains(cell)) return $"{Label(cell)} — votre navire, coulé";
+        if (_ownHitCells.Contains(cell)) return $"{Label(cell)} — votre navire, touché";
+        if (_ownShipCells.Contains(cell)) return $"{Label(cell)} — votre navire, intact";
+        if (_incoming.Contains(cell)) return $"{Label(cell)} — tir adverse à l'eau";
+        return $"{Label(cell)} — vide";
+    }
+
+    private string PlacementCellLabel(CoordinatesDto cell) =>
+        _takenCells.Contains(cell)
+            ? $"{Label(cell)} — occupée par un navire"
+            : $"{Label(cell)} — libre";
 
     private static string EnemyCellClass(string? result) => result switch
     {
