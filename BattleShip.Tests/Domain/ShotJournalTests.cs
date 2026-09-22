@@ -80,16 +80,26 @@ public class ShotJournalTests
         Assert.Equal(game.Winner!.Id, game.Shots[^1].ShooterId);
     }
 
-    [Fact]
-    public void Shots_CountsPerPlayer_NeverDifferByMoreThanOne()
+    [Theory]
+    [InlineData(2)]
+    [InlineData(23)]
+    [InlineData(42)]
+    public void Shots_ChangeShooter_ExactlyWhenThePreviousOneMissed(int seed)
     {
-        // Consequence directe de l'alternance : si le tour sautait un joueur,
-        // l'ecart se creuserait.
-        var game = PlayToTheEnd(23);
+        // Le tour ne passe qu'au coup manque : deux tirs consecutifs changent
+        // donc de tireur si et seulement si le premier a manque. Voir ADR 0014.
+        var game = PlayToTheEnd(seed);
+        var shots = game.Shots;
 
-        var counts = game.Shots.GroupBy(shot => shot.ShooterId).Select(group => group.Count()).ToList();
+        Assert.Equal(2, shots.Select(shot => shot.ShooterId).Distinct().Count());
 
-        Assert.Equal(2, counts.Count);
-        Assert.True(Math.Abs(counts[0] - counts[1]) <= 1, $"écart de {Math.Abs(counts[0] - counts[1])} tirs");
+        for (var index = 1; index < shots.Count; index++)
+        {
+            var previous = shots[index - 1];
+
+            Assert.Equal(
+                previous.Result is ShotResult.Miss,
+                shots[index].ShooterId != previous.ShooterId);
+        }
     }
 }
