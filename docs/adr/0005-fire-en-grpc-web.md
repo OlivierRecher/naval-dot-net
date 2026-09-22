@@ -21,9 +21,10 @@ aucun argument de performance ou de volume ne tient. Erreurs pauvres.
 **(b) `GetGameView` en gRPC.** Appelée souvent, mais c'est une lecture sans
 entrée à valider : la démonstration d'une erreur attendue devient artificielle.
 
-**(c) `Fire` en gRPC.** L'opération la plus fréquente d'une partie, la seule à
-porter une entrée validée et un enjeu de règles. Trois erreurs naturelles à
-démontrer.
+**(c) `Fire` en gRPC.** La seule opération à porter une entrée validée **et** un
+enjeu de règles : trois erreurs naturelles à démontrer. C'est aussi la plus
+fréquente d'une partie, mais ce n'est pas ce qui la fait choisir — voir la
+précision ci-dessous.
 
 **(d) Tout le contrat en gRPC.** Cohérent, mais supprime le fichier `api.http`
 et les essais manuels que le support recommande (diapo 35), et rend la
@@ -31,6 +32,34 @@ comparaison entre transports impossible.
 
 ## Décision
 Option **(c)**.
+
+**Précision du 2026-09-22 — sur quoi ce choix repose vraiment.** La rédaction
+initiale justifiait `Fire` par le **volume** : « l'opération la plus fréquente
+d'une partie », en opposant le piège d'« une opération marginale ». Les faits
+contredisent cet argument-là, et c'est exactement la question qui sera posée en
+soutenance. Comparons les deux chemins pour **un** tir :
+
+| Chemin | Aller-retours | Ce que le client obtient |
+|---|---|---|
+| `POST /games/{id}/shots` | **1** | `ShotOutcomeResponse`, **`View` comprise** |
+| `battleship.Battle/Fire` | **2** | `ShotOutcome` (5 champs), puis `GET /games/{id}` |
+
+`battleship.proto` ne transporte pas la vue, et `GameSession.FireAsync` appelle
+`RefreshAsync` sur **toutes** les branches acceptées — partie finie, touche,
+manqué en hot-seat, manqué en solo. L'opération choisie parce qu'elle est la plus
+fréquente est donc la seule à coûter un aller-retour de plus que l'alternative
+qu'elle remplace.
+
+Ce qui fait tenir le choix, et qui était déjà la vraie raison d'écarter (a) et
+(b), c'est la **richesse de ses erreurs** et sa **démontrabilité** : `Fire` est
+la seule opération dont le refus est une règle du jeu, donc la seule dont on
+puisse montrer une erreur attendue qui ne soit pas artificielle. Le socle demande
+« une réponse **et** une erreur démontrables » (diapo 48), pas un débit.
+
+**Le surcoût est assumé et non corrigé.** Faire porter la vue par `ShotOutcome`
+le supprimerait, au prix d'une `GameView` dupliquée dans le `.proto` — un second
+contrat à maintenir en parallèle du JSON, pour une partie qui tient dans un
+navigateur. L'aller-retour supplémentaire coûte moins cher que cette duplication.
 
 `Fire` passe par gRPC-Web, et **le front tire réellement via ce canal** — c'est
 ce qui établit que l'échange est « fonctionnel » au sens du support, plutôt
@@ -59,6 +88,8 @@ de comparaison réel plutôt que théorique.
 - **Deux chemins mènent au même tir. Ils ne doivent pas diverger** : les deux
   délèguent au même appel du domaine, aucune règle n'est réimplémentée dans le
   service gRPC.
+- **Un tir gRPC coûte deux aller-retours** là où `POST /shots` en coûte un : le
+  message ne porte pas la vue, donc le front la relit. Assumé, voir la décision.
 - Le front dépend de gRPC-Web pour sa fonction centrale : si le transport casse,
   le jeu casse. Mitigation : l'endpoint HTTP reste testé et permet d'isoler un
   incident au transport plutôt qu'au domaine.
