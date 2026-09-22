@@ -3,10 +3,12 @@ using BattleShip.Domain;
 namespace BattleShip.Tests.Domain;
 
 /// <summary>
-/// Le repository est enregistre en Singleton : deux requetes visant la meme
-/// partie — y compris une HTTP et une gRPC — atteignent le meme agregat en
-/// parallele. Ces tests protegent la transition et la projection, pas la table
-/// de stockage que le ConcurrentDictionary couvre deja. Voir ADR 0004.
+/// Le cache des parties vivantes est enregistré en Singleton : deux requêtes
+/// visant la même partie — y compris une HTTP et une gRPC — atteignent le même
+/// agrégat en parallèle. Le dépôt, lui, est Scoped, comme le DbContext qu'il
+/// porte. Ces tests protègent la transition et la projection de l'agrégat, pas
+/// la table qui le retrouve : le ConcurrentDictionary de GameCache la couvre
+/// déjà. Voir ADR 0008 et 0012.
 /// </summary>
 public class GameConcurrencyTests
 {
