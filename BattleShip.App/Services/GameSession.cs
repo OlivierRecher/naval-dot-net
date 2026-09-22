@@ -33,11 +33,11 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
     /// </summary>
     public string? GrpcRefusal { get; private set; }
 
-    public bool IsOver => View?.Status == nameof(GameStatusNames.Finished);
+    public bool IsOver => View?.Status == GameStatusNames.Finished;
 
-    public bool IsPlacingFleet => View?.Status == nameof(GameStatusNames.AwaitingFleet);
+    public bool IsPlacingFleet => View?.Status == GameStatusNames.AwaitingFleet;
 
-    public bool IsHotSeat => View?.Mode == nameof(GameModeNames.Local);
+    public bool IsHotSeat => View?.Mode == GameModeNames.Local;
 
     /// <summary>
     /// Nom du joueur a qui l'appareil doit etre passe, ou null. En hot-seat, la
@@ -146,7 +146,7 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
             // Le tour ne change qu'au coup manque : sur une touche le tireur
             // garde la main, donc ni passation ni tour du bot. Voir AGENTS.md § 3.
-            if (outcome.Result is not "Miss")
+            if (outcome.Result is not ShotResultNames.Miss)
             {
                 await RefreshAsync(gameId);
                 return;
@@ -369,7 +369,7 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
             var cell = $"{(char)('A' + outcome.Target.Column)}{outcome.Target.Row + 1}";
             shots.Add($"{cell}, {Describe(outcome.Result, "il")}");
 
-            if (outcome.GameOver || outcome.Result is "Miss")
+            if (outcome.GameOver || outcome.Result is ShotResultNames.Miss)
             {
                 break;
             }
@@ -387,12 +387,6 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
     private async Task RefreshAsync(Guid gameId) =>
         View = await http.GetFromJsonAsync<GameViewResponse>($"games/{gameId}");
-
-    private enum GameModeNames
-    {
-        Solo,
-        Local
-    }
 
     private async Task RunAsync(Func<Task> action)
     {
@@ -421,16 +415,9 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
     private static string Describe(string result, string subject) => result switch
     {
-        "Miss" => $"{subject} manque.",
-        "Hit" => $"{subject} touche !",
-        "Sunk" => $"{subject} coule un navire !",
+        ShotResultNames.Miss => $"{subject} manque.",
+        ShotResultNames.Hit => $"{subject} touche !",
+        ShotResultNames.Sunk => $"{subject} coule un navire !",
         _ => result
     };
-
-    private enum GameStatusNames
-    {
-        AwaitingFleet,
-        InProgress,
-        Finished
-    }
 }

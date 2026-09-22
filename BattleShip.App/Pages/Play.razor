@@ -26,14 +26,14 @@
 
         <label class="form-label" for="mode">Adversaire</label>
         <select id="mode" class="form-select mb-3" @bind="_mode">
-            <option value="Solo">Un bot</option>
-            <option value="Local">Un second joueur, sur cet appareil</option>
+            <option value="@GameModeNames.Solo">Un bot</option>
+            <option value="@GameModeNames.Local">Un second joueur, sur cet appareil</option>
         </select>
 
         <label class="form-label" for="player">Votre nom</label>
         <input id="player" class="form-control mb-3" @bind="_playerName" />
 
-        @if (_mode == "Local")
+        @if (_mode == GameModeNames.Local)
         {
             <label class="form-label" for="opponent">Nom du second joueur</label>
             <input id="opponent" class="form-control mb-3" @bind="_opponentName" />
@@ -42,7 +42,7 @@
         <label class="form-label" for="side">Taille de la grille</label>
         <input id="side" type="number" min="8" max="20" class="form-control mb-3" @bind="_side" />
 
-        @if (_mode == "Solo")
+        @if (_mode == GameModeNames.Solo)
         {
         <label class="form-label" for="difficulty">Difficulté du bot</label>
         <select id="difficulty" class="form-select" @bind="_botDifficulty">
@@ -166,11 +166,11 @@ else if (Session.IsPlacingFleet)
 
                 <div class="btn-group mb-3" role="group">
                     <button type="button"
-                            class="btn btn-sm @(_orientation == "Horizontal" ? "btn-primary" : "btn-outline-primary")"
-                            @onclick='() => _orientation = "Horizontal"'>Horizontal</button>
+                            class="btn btn-sm @(_orientation == OrientationNames.Horizontal ? "btn-primary" : "btn-outline-primary")"
+                            @onclick="() => _orientation = OrientationNames.Horizontal">Horizontal</button>
                     <button type="button"
-                            class="btn btn-sm @(_orientation == "Vertical" ? "btn-primary" : "btn-outline-primary")"
-                            @onclick='() => _orientation = "Vertical"'>Vertical</button>
+                            class="btn btn-sm @(_orientation == OrientationNames.Vertical ? "btn-primary" : "btn-outline-primary")"
+                            @onclick="() => _orientation = OrientationNames.Vertical">Vertical</button>
                 </div>
 
                 <p class="form-text">Cliquez la case de départ : elle sera l'extrémité haute ou gauche du navire.</p>
@@ -304,7 +304,7 @@ else
     private int _side = 10;
     private string _botDifficulty = BotDifficultyCatalog.All[0].Name;
     private string _fleetPlacement = "Random";
-    private string _mode = "Solo";
+    private string _mode = GameModeNames.Solo;
     private string _opponentName = "Ulysse";
     private Dictionary<string, int> _fleet = ClassicFleet();
 
@@ -342,7 +342,7 @@ else
     private List<string> FleetAsNames() =>
         [.. _fleet.SelectMany(entry => Enumerable.Repeat(entry.Key, entry.Value))];
 
-    private string _orientation = "Horizontal";
+    private string _orientation = OrientationNames.Horizontal;
     private readonly List<ShipPlacementDto> _placed = [];
     private HashSet<CoordinatesDto> _takenCells = [];
 
@@ -376,7 +376,7 @@ else
     }
 
     private static List<CoordinatesDto> CellsOf(int column, int row, int size, string orientation) =>
-        [.. Enumerable.Range(0, size).Select(offset => orientation == "Horizontal"
+        [.. Enumerable.Range(0, size).Select(offset => orientation == OrientationNames.Horizontal
             ? new CoordinatesDto(column + offset, row)
             : new CoordinatesDto(column, row + offset))];
 
@@ -453,7 +453,7 @@ else
     {
         ClearFleet();
         await Session.StartAsync(_playerName, _side, _mode, _botDifficulty, _fleetPlacement,
-            _mode == "Local" ? _opponentName : null, FleetAsNames());
+            _mode == GameModeNames.Local ? _opponentName : null, FleetAsNames());
     }
 
     /// <summary>La flotte posee appartient au joueur precedent : l'ecran suivant repart de zero.</summary>
@@ -482,9 +482,9 @@ else
 
     private static string EnemyCellClass(string? result) => result switch
     {
-        "Miss" => "cell-miss",
-        "Hit" => "cell-hit",
-        "Sunk" => "cell-sunk",
+        ShotResultNames.Miss => "cell-miss",
+        ShotResultNames.Hit => "cell-hit",
+        ShotResultNames.Sunk => "cell-sunk",
         _ => "cell-unknown"
     };
 

@@ -88,7 +88,7 @@ else
     private async Task LoadAsync() => await Session.LoadHistoryAsync();
 
     private static string ModeOf(GameSummaryResponse game) =>
-        game.Mode == "Local"
+        game.Mode == GameModeNames.Local
             ? "Duel"
             : $"Solo — {BotDifficultyCatalog.LabelOf(game.BotDifficulty)}";
 }
