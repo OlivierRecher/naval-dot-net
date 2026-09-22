@@ -235,6 +235,37 @@ public class PersistenceTests : IDisposable
         Assert.Equal(game.Id, refusal.GameId);
     }
 
+    /// <summary>
+    /// Le pendant du journal non rejouable, côté placements : une ligne éditée à
+    /// la main, une base d'une version antérieure ou un changement de longueur de
+    /// navire rendaient le placement invalide, et <c>Board.Place</c> se contentait
+    /// de ne rien poser. La flotte rechargée était alors plus courte que celle qui
+    /// avait été jouée — <c>AllShipsSunk</c> devient vrai plus tôt, donc un autre
+    /// vainqueur, sans la moindre trace.
+    /// </summary>
+    [Fact]
+    public void AStoredPlacementThatNoLongerFitsTheBoard_IsRefusedAtReload()
+    {
+        var game = NewGame();
+        AfterRestart().Add(game);
+
+        using (var db = NewContext())
+        {
+            // Le navire déborde désormais de la grille ; le journal, lui, n'a pas
+            // bougé : c'est bien le placement qui est refusé, pas un tir.
+            var ship = db.Ships.OrderBy(entity => entity.Id).First();
+
+            ship.Column = BoardSize.Standard.Columns - 1;
+            ship.Orientation = nameof(Orientation.Horizontal);
+
+            db.SaveChanges();
+        }
+
+        var refusal = Assert.Throws<UnreplayableJournalException>(() => AfterRestart().Find(game.Id));
+
+        Assert.Equal(game.Id, refusal.GameId);
+    }
+
     [Fact]
     public void Find_OnAnUnknownGame_ReturnsNull() =>
         Assert.Null(AfterRestart().Find(Guid.NewGuid()));
