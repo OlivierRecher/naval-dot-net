@@ -138,7 +138,7 @@ public static class GameEndpoints
 
         if (outcome.Rejection is { } rejection)
         {
-            return Refused(rejection);
+            return Refused(rejection, game.Fleet);
         }
 
         repository.Save(game);
@@ -171,10 +171,10 @@ public static class GameEndpoints
         }
     }
 
-    private static IResult Refused(FleetRejection rejection) => rejection switch
+    private static IResult Refused(FleetRejection rejection, IReadOnlyList<ShipKind> fleet) => rejection switch
     {
         FleetRejection.WrongComposition => TypedResults.Problem(
-            "La flotte doit compter exactement un navire de chaque type.",
+            $"La flotte doit correspondre exactement à la composition de la partie, répétitions comprises : {string.Join(", ", fleet)}.",
             statusCode: StatusCodes.Status400BadRequest),
 
         FleetRejection.OutOfBounds => TypedResults.Problem(
