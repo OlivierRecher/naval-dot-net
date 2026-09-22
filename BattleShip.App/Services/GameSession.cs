@@ -225,15 +225,13 @@ public sealed class GameSession(HttpClient http, Battle.BattleClient battle)
 
             View = await response.Content.ReadFromJsonAsync<GameViewResponse>();
 
-            if (IsPlacingFleet)
-            {
-                Notice = "Flotte enregistrée.";
-                return;
-            }
-
-            HandoverTo = null;
-
-            Notice = "Flotte en place. À vous de jouer.";
+            // La passation n'est levee que par ConfirmHandover. Quand la seconde
+            // flotte est posee, le serveur demarre la partie et sert la vue du
+            // PREMIER joueur : la lever ici afficherait sa flotte a celui qui
+            // tient encore l'appareil. Voir ADR 0011.
+            Notice = IsPlacingFleet
+                ? "Flotte enregistrée."
+                : "Flotte en place. La partie commence.";
         });
     }
 
