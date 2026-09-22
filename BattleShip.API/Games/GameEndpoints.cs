@@ -101,7 +101,7 @@ public static class GameEndpoints
 
         repository.Save(game);
 
-        return TypedResults.Ok(outcome.ToResponse(game));
+        return TypedResults.Ok(outcome.ToResponse(game.ProjectForClient()));
     }
 
     private static IResult PlayBotTurn(Guid id, IGameRepository repository, IBotStrategyFactory strategies)
@@ -120,7 +120,7 @@ public static class GameEndpoints
 
         repository.Save(game);
 
-        return TypedResults.Ok(outcome.ToResponse(game));
+        return TypedResults.Ok(outcome.ToResponse(game.ProjectForClient()));
     }
 
     private static IResult PlaceFleet(Guid id, PlaceFleetRequest request, IGameRepository repository)
