@@ -1,16 +1,11 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+
+<OceanBackdrop />
+
 <div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+    <NavMenu />
 
-    <main>
-        <div class="top-row px-4">
-            <a href="https://github.com/OlivierRecher/naval-dot-net" target="_blank" rel="noopener">Dépôt GitHub</a>
-        </div>
-
-        <article class="content px-4">
-            @Body
-        </article>
+    <main class="content">
+        @Body
     </main>
 </div>

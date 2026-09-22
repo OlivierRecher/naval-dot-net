@@ -1,0 +1,46 @@
+.section {
+    margin-top: 1.6rem;
+    color: #fff;
+    text-shadow: 0 2px 0 rgba(3, 25, 45, 0.5);
+}
+
+.stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 1rem;
+    margin-top: 0.9rem;
+}
+
+.tile {
+    padding: 0.9rem 1.1rem;
+    border: 3px solid #fff;
+    border-radius: 1.3rem;
+    background: rgba(255, 255, 255, 0.93);
+    color: var(--ink);
+    box-shadow: var(--panel);
+}
+
+.tile dt {
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--sea);
+}
+
+.tile dd {
+    margin: 0.2rem 0 0;
+    font-weight: 600;
+}
+
+.value {
+    font-size: 1.9rem;
+    font-weight: 800;
+    line-height: 1.1;
+    color: var(--deep);
+}
+
+.waiting {
+    color: rgba(255, 255, 255, 0.85);
+    font-weight: 600;
+}
