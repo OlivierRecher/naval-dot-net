@@ -266,6 +266,65 @@ public class PersistenceTests : IDisposable
         Assert.Equal(game.Id, refusal.GameId);
     }
 
+    /// <summary>
+    /// Le cas que le refus précédent ne couvrait pas : quand le tir divergent
+    /// tombe sur une case <b>libre</b>, le rejeu l'accepte. Le tir change alors de
+    /// tireur et de grille, sans exception ni 409 — la partie rechargée n'est plus
+    /// celle qui avait été jouée. C'est <c>ShooterId</c>, écrit à chaque tir, qui
+    /// permet de le voir.
+    /// </summary>
+    [Fact]
+    public void AJournalWhoseShooterDivergesFromTheReplay_IsRefused()
+    {
+        var game = NewGame();
+        AfterRestart().Add(game);
+
+        var hit = game.Opponent.Board.Ships[0].Cells[0];
+        var free = FirstCellFreeOnBothBoards(game);
+
+        using (var db = NewContext())
+        {
+            // Sous « le tour passe toujours », le bot tirait après la touche de
+            // l'humain. Aujourd'hui l'humain garde la main : le rejeu dirige ce
+            // second tir sur l'autre grille, où la case est libre — donc accepté.
+            db.Shots.AddRange(
+                new ShotRecord
+                {
+                    GameId = game.Id,
+                    Ordinal = 0,
+                    ShooterId = game.CurrentPlayer.Id,
+                    Column = hit.Column,
+                    Row = hit.Row,
+                    Result = nameof(ShotResult.Hit)
+                },
+                new ShotRecord
+                {
+                    GameId = game.Id,
+                    Ordinal = 1,
+                    ShooterId = game.Opponent.Id,
+                    Column = free.Column,
+                    Row = free.Row,
+                    Result = nameof(ShotResult.Miss)
+                });
+
+            db.SaveChanges();
+        }
+
+        var refusal = Assert.Throws<UnreplayableJournalException>(() => AfterRestart().Find(game.Id));
+
+        Assert.Equal(game.Id, refusal.GameId);
+    }
+
+    private static Coordinates FirstCellFreeOnBothBoards(Game game) =>
+        Enumerable.Range(0, BoardSize.Standard.Columns * BoardSize.Standard.Rows)
+            .Select(index => new Coordinates(
+                index % BoardSize.Standard.Columns,
+                index / BoardSize.Standard.Columns))
+            .First(cell => IsFree(game.CurrentPlayer.Board, cell) && IsFree(game.Opponent.Board, cell));
+
+    private static bool IsFree(Board board, Coordinates cell) =>
+        board.Ships.All(ship => !ship.Cells.Contains(cell));
+
     [Fact]
     public void Find_OnAnUnknownGame_ReturnsNull() =>
         Assert.Null(AfterRestart().Find(Guid.NewGuid()));
