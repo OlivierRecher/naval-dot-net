@@ -968,7 +968,6 @@ cette honnêteté avait suffi à le rendre confortable.
 
 ---
 
-<<<<<<< HEAD
 ## 2026-09-22 — Épinglage du SDK .NET 10 dans global.json (compatibilité 10.0.1xx)
 
 **Outil / modèle** : Antigravity (Gemini 3.8 Flash High)
@@ -1005,7 +1004,8 @@ etc.) est désormais accepté, tout en garantissant qu'aucune autre version maje
 
 **Preuves** : issue #29, branche `fix/global-json-sdk-compatibility`.
 
-=======
+---
+
 ## 2026-09-16 — Une touche rend la main au tireur
 
 **Outil / modèle** : agent de codage GitHub Copilot (PR #11), puis Claude Code
@@ -1086,4 +1086,3 @@ exact ; c'est son périmètre qui était faux. Voir `REVUE-IA.md`, revue 11.
 **Preuves** : issue #10, PR #11, commit `9446b45`,
 [ADR 0014](./docs/adr/0014-une-touche-rend-la-main-au-tireur.md),
 `REVUE-IA.md` revue 11.
->>>>>>> origin/main
