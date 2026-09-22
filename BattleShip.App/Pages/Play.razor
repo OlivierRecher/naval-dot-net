@@ -408,7 +408,17 @@ else
     private HashSet<CoordinatesDto> _sunkCells = [];
     private HashSet<CoordinatesDto> _incoming = [];
 
-    protected override void OnInitialized() => Session.OnChange += Refresh;
+    /// <summary>
+    /// La session est Scoped : elle survit au composant, qui est reconstruit à
+    /// chaque retour sur la page. S'abonner ne suffit donc pas — sans cette
+    /// première projection, les grilles restent vides jusqu'au prochain
+    /// changement de la session.
+    /// </summary>
+    protected override void OnInitialized()
+    {
+        Project();
+        Session.OnChange += Refresh;
+    }
 
     public void Dispose() => Session.OnChange -= Refresh;
 

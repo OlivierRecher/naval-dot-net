@@ -968,6 +968,7 @@ cette honnêteté avait suffi à le rendre confortable.
 
 ---
 
+<<<<<<< HEAD
 ## 2026-09-22 — Épinglage du SDK .NET 10 dans global.json (compatibilité 10.0.1xx)
 
 **Outil / modèle** : Antigravity (Gemini 3.8 Flash High)
@@ -1004,3 +1005,85 @@ etc.) est désormais accepté, tout en garantissant qu'aucune autre version maje
 
 **Preuves** : issue #29, branche `fix/global-json-sdk-compatibility`.
 
+=======
+## 2026-09-16 — Une touche rend la main au tireur
+
+**Outil / modèle** : agent de codage GitHub Copilot (PR #11), puis Claude Code
+(Opus 5) pour la reprise.
+
+**Contexte**
+L'issue #10 signalait deux symptômes observés en jouant, pas en lisant le code :
+
+> - quand on joue contre un bot, le joueur peut rejouer mais le bot, alors que
+>   ça devrait être le cas.
+> - quand on joue à deux joueur, même si on touche, le tour passe au suivant au
+>   lieu de rejouer.
+
+La règle en vigueur depuis le cadrage était « le tour passe à chaque tir »
+(`AGENTS.md` § 3). Elle n'avait jamais été discutée : elle avait été écrite au
+premier jour et jamais réexaminée.
+
+**Prompt**
+Le contenu de l'issue #10, soumis à l'agent de codage Copilot depuis GitHub.
+
+**Réponse résumée**
+L'agent a produit la PR #11. Le cœur de sa proposition tient en trois lignes
+dans `Game.FireLocked` — n'échanger les joueurs que sur un `Miss` — accompagnées
+de la mise à jour des tests qui encodaient l'ancienne règle et d'un alignement
+de `GameSession`.
+
+**Décision** : **adaptée**.
+
+La règle du domaine est retenue telle quelle. Le périmètre, non : la proposition
+traitait le changement comme local, alors que « le tour passe à chaque tir »
+était une hypothèse tacite dans trois endroits que la PR ne couvrait pas toutes.
+
+1. **Le front réclamait le tour du bot après chaque tir**, et armait la passation
+   hot-seat à chaque tir. Sur une touche, le tireur garde la main : l'écran de
+   passation attendait alors un adversaire que le serveur n'appellerait jamais,
+   avec un bouton « Réessayer » incapable de réussir. La partie était bloquée dès
+   la première touche.
+2. **Cinq tests d'intégration alternaient tir humain / tour de bot en aveugle.**
+   Un tour de bot réclamé hors de son tour répond 409 ; l'ignorer faisait dériver
+   le nombre de tirs et rendait la suite non déterministe. Ils lisent désormais la
+   vue pour savoir à qui est le tour, comme le navigateur.
+3. **Le rejeu du journal déduit qui tirait en appliquant la règle du tour**
+   (ADR 0012). Une partie enregistrée sous l'ancienne règle ne se reconstruit
+   plus : elle est refusée en 409 avec un message, au lieu de remonter en erreur
+   serveur ou de se rejouer sur la mauvaise grille.
+
+Le tout tient en un seul commit parce que rien n'y est séparable : une étape
+intermédiaire laisserait `dotnet test` au rouge, ce qu'`AGENTS.md` § 12 interdit.
+
+**Vérification**
+
+Mutations rejouées et recomptées le 2026-09-22, sur le code livré :
+
+| Contrôle | Résultat attendu | Résultat observé |
+|---|---|---|
+| `CI=true dotnet build` puis `dotnet test` | vert, sans avertissement | 253 tests, 0 échec, 0 avertissement |
+| `if (result is Miss)` → `is not Miss` dans `Game.FireLocked` | des tests rouges | **25** rouges / 253 |
+| Garde de rejeu retirée de `Game.Restore` | un test rouge | **1** rouge / 253 |
+| Filtre 409 du journal non rejouable retiré | un test rouge | **1** rouge / 253 |
+
+Les trois dernières lignes sont ce qui distingue une suite verte d'une suite
+utile : elles établissent que les tests ajoutés protègent bien les règles
+annoncées, et non le chemin nominal. Le message du commit `9446b45` annonçait 8
+tests rouges pour l'inversion de la règle ; le recompte en donne 25. Le chiffre
+retenu ici est celui qui a été mesuré.
+
+**Portée du contrôle — ce qui n'est PAS vérifié**
+Le correctif du hot-seat côté client n'est couvert par **aucun test automatisé** :
+`BattleShip.App` n'a pas de projet de test. Il a été vérifié à la main dans le
+navigateur.
+
+**Constat de méthode**
+Une règle de jeu changée dans le domaine n'est pas une modification du domaine.
+Le journal persisté, les tests d'intégration et la boucle du front en dépendaient
+sans le dire. Le diagnostic de l'agent était juste et son correctif de domaine
+exact ; c'est son périmètre qui était faux. Voir `REVUE-IA.md`, revue 11.
+
+**Preuves** : issue #10, PR #11, commit `9446b45`,
+[ADR 0014](./docs/adr/0014-une-touche-rend-la-main-au-tireur.md),
+`REVUE-IA.md` revue 11.
+>>>>>>> origin/main
