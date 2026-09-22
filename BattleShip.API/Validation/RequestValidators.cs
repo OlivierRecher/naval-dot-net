@@ -6,20 +6,24 @@ namespace BattleShip.API.Validation;
 
 public sealed class CreateGameRequestValidator : AbstractValidator<CreateGameRequest>
 {
-    public const int MinBoardSide = 8;
-    public const int MaxBoardSide = 20;
-
     public CreateGameRequestValidator()
     {
+        // Chaque regle porte son message : FluentValidation en fournit un par
+        // defaut, mais en anglais, et le joueur le lit maintenant tel quel.
+        // Voir AGENTS.md § 7.
         RuleFor(request => request.PlayerName)
             .NotEmpty()
-            .MaximumLength(40);
+            .WithMessage("Votre nom est obligatoire.")
+            .MaximumLength(40)
+            .WithMessage("Votre nom ne doit pas dépasser 40 caractères.");
 
         RuleFor(request => request.Columns)
-            .InclusiveBetween(MinBoardSide, MaxBoardSide);
+            .InclusiveBetween(BoardBounds.MinSide, BoardBounds.MaxSide)
+            .WithMessage($"La grille va de {BoardBounds.MinSide} à {BoardBounds.MaxSide} colonnes.");
 
         RuleFor(request => request.Rows)
-            .InclusiveBetween(MinBoardSide, MaxBoardSide);
+            .InclusiveBetween(BoardBounds.MinSide, BoardBounds.MaxSide)
+            .WithMessage($"La grille va de {BoardBounds.MinSide} à {BoardBounds.MaxSide} lignes.");
 
         // Chaque nom d'abord, la composition ensuite : inutile d'evaluer une
         // regle de flotte sur une liste dont un element n'est pas un navire.
@@ -40,9 +44,10 @@ public sealed class CreateGameRequestValidator : AbstractValidator<CreateGameReq
         // est un bot que le serveur nomme lui-meme.
         RuleFor(request => request.OpponentName)
             .NotEmpty()
+            .WithMessage("Une partie locale oppose deux joueurs : le nom du second est obligatoire.")
             .MaximumLength(40)
-            .When(request => string.Equals(request.Mode, nameof(GameMode.Local), StringComparison.OrdinalIgnoreCase))
-            .WithMessage("Une partie locale oppose deux joueurs : le nom du second est obligatoire.");
+            .WithMessage("Le nom du second joueur ne doit pas dépasser 40 caractères.")
+            .When(request => string.Equals(request.Mode, nameof(GameMode.Local), StringComparison.OrdinalIgnoreCase));
 
         RuleFor(request => request.FleetPlacement)
             .Must(placement => EnumNames<FleetPlacement>.TryParse(placement, out _))
@@ -66,8 +71,13 @@ public sealed class FireRequestValidator : AbstractValidator<FireRequest>
 {
     public FireRequestValidator()
     {
-        RuleFor(request => request.Column).GreaterThanOrEqualTo(0);
-        RuleFor(request => request.Row).GreaterThanOrEqualTo(0);
+        RuleFor(request => request.Column)
+            .GreaterThanOrEqualTo(0)
+            .WithMessage("La colonne visée ne peut pas être négative.");
+
+        RuleFor(request => request.Row)
+            .GreaterThanOrEqualTo(0)
+            .WithMessage("La ligne visée ne peut pas être négative.");
     }
 }
 
@@ -75,7 +85,9 @@ public sealed class PlaceFleetRequestValidator : AbstractValidator<PlaceFleetReq
 {
     public PlaceFleetRequestValidator()
     {
-        RuleFor(request => request.Ships).NotEmpty();
+        RuleFor(request => request.Ships)
+            .NotEmpty()
+            .WithMessage("La flotte à poser ne peut pas être vide.");
 
         RuleForEach(request => request.Ships).ChildRules(ship =>
         {
@@ -87,8 +99,13 @@ public sealed class PlaceFleetRequestValidator : AbstractValidator<PlaceFleetReq
                 .Must(orientation => EnumNames<Orientation>.TryParse(orientation, out _))
                 .WithMessage($"Orientation inconnue : attendu {string.Join(", ", EnumNames<Orientation>.All)}.");
 
-            ship.RuleFor(placement => placement.Column).GreaterThanOrEqualTo(0);
-            ship.RuleFor(placement => placement.Row).GreaterThanOrEqualTo(0);
+            ship.RuleFor(placement => placement.Column)
+                .GreaterThanOrEqualTo(0)
+                .WithMessage("La colonne d'un navire ne peut pas être négative.");
+
+            ship.RuleFor(placement => placement.Row)
+                .GreaterThanOrEqualTo(0)
+                .WithMessage("La ligne d'un navire ne peut pas être négative.");
         });
     }
 }
