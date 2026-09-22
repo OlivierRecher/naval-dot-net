@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using BattleShip.Models;
+using Microsoft.AspNetCore.Mvc;
 
 namespace BattleShip.Tests.Api;
 
@@ -101,6 +102,13 @@ public class CustomFleetEndpointsTests(ApiFactory factory) : IClassFixture<ApiFa
         ]));
 
         Assert.Equal(HttpStatusCode.BadRequest, classic.StatusCode);
+
+        // Le statut seul ne dit pas si le refus a nomme la bonne regle : sans
+        // cette assertion, le message a pu deriver vers une composition que la
+        // partie n'attend pas.
+        var refusal = (await classic.Content.ReadFromJsonAsync<ProblemDetails>())!;
+
+        Assert.Contains("Cruiser, PatrolBoat", refusal.Detail);
 
         var matching = await _client.PutAsJsonAsync($"/games/{view.GameId}/fleet", new PlaceFleetRequest(
         [
