@@ -1,7 +1,10 @@
 # ADR 0004 : abstraire le stockage derrière `IGameRepository` dès le socle
 
 ## Statut et date
-Accepté — 2026-09-15.
+Accepté — 2026-09-15. **Dépassé par l'ADR 0012** : `InMemoryGameRepository` a
+été supprimé du code le 2026-09-22, plus rien ne l'enregistrait depuis que
+`SqliteGameRepository` a pris sa place. L'abstraction `IGameRepository`, elle,
+reste — c'est elle que cet ADR justifie, pas l'implémentation qui l'a étrennée.
 
 ## Contexte
 Le socle n'a besoin d'aucune persistance : une partie contre un bot vit le temps
