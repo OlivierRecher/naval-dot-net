@@ -4,8 +4,10 @@ option csharp_namespace = "BattleShip.Grpc";
 
 package battleship;
 
-// Fire est l'operation la plus frequente d'une partie : c'est la seule pour
-// laquelle un contrat binaire se justifie. Voir ADR 0005.
+// Fire est la seule operation dont le refus est une regle du jeu : c'est ce qui
+// rend l'erreur attendue demontrable, donc ce qui justifie le contrat binaire
+// ici plutot qu'ailleurs. Le message ne porte pas la vue : le front la relit en
+// HTTP, soit un aller-retour de plus que POST /shots. Assume, voir ADR 0005.
 service Battle {
   rpc Fire (FireCommand) returns (ShotOutcome);
 }

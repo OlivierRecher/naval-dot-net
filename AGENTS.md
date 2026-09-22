@@ -144,9 +144,11 @@ GET    /stats                 → 200 Statistics
 
 ### gRPC-Web — opération `Fire`
 
-`Fire` est l'opération la plus fréquente : c'est la seule pour laquelle un
-contrat binaire se justifie. **Le front tire réellement via gRPC-Web** — c'est
-ce qui prouve que l'échange est fonctionnel.
+`Fire` est la seule opération dont le refus est une **règle du jeu** : c'est ce
+qui rend son erreur attendue démontrable, donc ce qui justifie le contrat binaire
+ici plutôt qu'ailleurs. **Le front tire réellement via gRPC-Web** — c'est ce qui
+prouve que l'échange est fonctionnel. Le message ne porte pas la vue : un tir
+gRPC coûte un aller-retour de plus que `POST /shots`, assumé par l'ADR 0005.
 
 Erreurs à démontrer : `InvalidArgument` (validation) · `NotFound` (partie
 inconnue) · `FailedPrecondition` (case déjà visée, partie terminée).
