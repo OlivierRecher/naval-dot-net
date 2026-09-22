@@ -16,6 +16,21 @@ Content-Type: application/json
 
 { "column": 4, "row": 4 }
 
+### Relire le tour avant de rejouer la case : c'est lui qui rend le refus lisible
+GET {{api}}/games/{{create.response.body.gameId}}
+
+### Case déjà visée : 409, le tour n'est pas consommé
+# Ne vaut que si la réponse ci-dessus porte "isViewerTurn": true. Depuis l'ADR
+# 0014 le tour ne passe qu'au coup manqué : si le tir précédent a touché, la main
+# est restée ici et le refus est bien « Cette case a déjà été visée ». S'il a
+# manqué, la main est au bot et le 409 obtenu est « C'est au bot de jouer » —
+# autre refus, même statut. Jouer alors « Faire jouer le bot » jusqu'à ce que
+# "isViewerTurn" repasse à true, puis revenir ici.
+POST {{api}}/games/{{create.response.body.gameId}}/shots
+Content-Type: application/json
+
+{ "column": 4, "row": 4 }
+
 ### Faire jouer le bot
 POST {{api}}/games/{{create.response.body.gameId}}/bot-turn
 Content-Type: application/json
@@ -27,12 +42,6 @@ POST {{api}}/games
 Content-Type: application/json
 
 { "playerName": "", "columns": 10, "rows": 10, "mode": "Solo", "botDifficulty": "HuntTarget", "fleetPlacement": "Random" }
-
-### Case déjà visée : 409, le tour n'est pas consommé
-POST {{api}}/games/{{create.response.body.gameId}}/shots
-Content-Type: application/json
-
-{ "column": 4, "row": 4 }
 
 ### Difficulté de bot inconnue : 400 produit par le filtre de validation
 POST {{api}}/games
@@ -46,6 +55,14 @@ POST {{api}}/games
 Content-Type: application/json
 
 { "playerName": "Olivier", "columns": 10, "rows": 10, "mode": "Solo", "botDifficulty": "HuntTarget", "fleetPlacement": "Manual" }
+
+### Tirer avant d'avoir posé sa flotte : 409, le seul refus de tir sans hasard
+# Le statut AwaitingFleet est vérifié avant la case et avant le tour : ce refus
+# ne dépend ni du placement aléatoire du bot, ni de qui tient la main.
+POST {{api}}/games/{{manual.response.body.gameId}}/shots
+Content-Type: application/json
+
+{ "column": 0, "row": 0 }
 
 ### Poser la flotte : 200, la partie démarre
 PUT {{api}}/games/{{manual.response.body.gameId}}/fleet
