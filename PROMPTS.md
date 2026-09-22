@@ -968,6 +968,44 @@ cette honnêteté avait suffi à le rendre confortable.
 
 ---
 
+## 2026-09-22 — Épinglage du SDK .NET 10 dans global.json (compatibilité 10.0.1xx)
+
+**Outil / modèle** : Antigravity (Gemini 3.8 Flash High)
+
+**Contexte**
+Lors de l'exécution sur un poste de travail Linux disposant du SDK .NET 10.0.111
+(version distribuée par les dépôts Fedora), toute commande .NET échouait
+immédiatement avec l'erreur 155 (`A compatible .NET SDK was not found`).
+
+La cause : `global.json` demandait `10.0.400` avec `rollForward: latestFeature`.
+Cette directive autorise les montées en version mais refuse toute version
+inférieure à la version pivot, excluant de fait les environnements de
+développement sous bande 10.0.1xx.
+
+**Prompt**
+> ajoute l'issue pour le problème des versions du sdk, crée une branche, le fix et la pullrequest correspondante
+
+**Réponse résumée**
+Abaisser la version pivot dans `global.json` à `10.0.100` avec
+`rollForward: latestFeature`. Tout SDK .NET 10 (10.0.100, 10.0.111, 10.0.400,
+etc.) est désormais accepté, tout en garantissant qu'aucune autre version majeure
+(.NET 8 ou 9) ne puisse être sélectionnée, conformément à `AGENTS.md` § 14.
+
+**Décision** : acceptée.
+
+**Vérification**
+
+| Contrôle | Résultat attendu | Résultat observé |
+|---|---|---|
+| `dotnet --info` sur machine de dev | Détecte SDK 10.0.111 | SDK 10.0.111 sélectionné |
+| `dotnet build` | Compilation réussie | 0 avertissement, 0 erreur |
+| `dotnet test` | 253 tests réussis | 253 tests, 0 échec |
+| Documentation | Prérequis mis à jour | README.md aligné |
+
+**Preuves** : issue #29, branche `fix/global-json-sdk-compatibility`.
+
+---
+
 ## 2026-09-16 — Une touche rend la main au tireur
 
 **Outil / modèle** : agent de codage GitHub Copilot (PR #11), puis Claude Code

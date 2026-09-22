@@ -16,7 +16,7 @@ TP noté du cours C# / ASP.NET — Christophe MOMMER, HTS Learning.
 
 | | |
 |---|---|
-| **SDK .NET 10** | [`global.json`](./global.json) demande `10.0.400` avec `rollForward: latestFeature` : tout SDK .NET 10 de version **égale ou supérieure** convient, y compris une bande de fonctionnalités plus récente. `dotnet --version` doit répondre `10.x`. |
+| **SDK .NET 10** | [`global.json`](./global.json) demande `10.0.100` avec `rollForward: latestFeature` : tout SDK .NET 10 de version **égale ou supérieure** convient (ex. `10.0.111` ou `10.0.400`), y compris une bande de fonctionnalités plus récente. `dotnet --version` doit répondre `10.x`. |
 | **Certificat HTTPS de développement** | Obligatoire : sans lui le navigateur refuse la page. Voir ci-dessous. |
 | **Un navigateur** | L'interface est du WebAssembly ; tout navigateur récent convient. |
 
