@@ -1,6 +1,69 @@
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">Bataille navale</a>
-        <a class="nav-link text-white" href="historique">Historique</a>
+@using BattleShip.App.Services
+@inject OceanAudio Audio
+
+<nav class="deck">
+    <a class="brand" href="">
+        <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+            <circle class="ring" cx="16" cy="6" r="3" />
+            <path class="arm" d="M16 9v18M8 19a8 8 0 0 0 16 0M10 12h12" />
+        </svg>
+        <span>Bataille navale</span>
+    </a>
+
+    <div class="links">
+        <NavLink class="link" href="" Match="NavLinkMatch.All">Jouer</NavLink>
+        <NavLink class="link" href="historique">Historique</NavLink>
+        <a class="link" href="https://github.com/OlivierRecher/naval-dot-net" target="_blank" rel="noopener">Dépôt</a>
+
+        <button type="button"
+                class="sound @(Audio.IsMuted ? "muted" : null)"
+                aria-pressed="@SoundPressed"
+                title="@SoundLabel"
+                aria-label="@SoundLabel"
+                @onclick="ToggleSoundAsync">
+            <svg viewBox="0 0 26 24" aria-hidden="true">
+                <path class="horn" d="M3 9.5h4.2L13 5v14L7.2 14.5H3z" />
+                <path class="wave" d="M16.4 9.2a5 5 0 0 1 0 5.6" />
+                <path class="wave" d="M19.2 6.6a9 9 0 0 1 0 10.8" />
+                <path class="cross" d="M17 9.5l6 5M23 9.5l-6 5" />
+            </svg>
+        </button>
     </div>
-</div>
+</nav>
+
+@code {
+    private string SoundLabel => Audio.IsMuted ? "Activer le son" : "Couper le son";
+
+    /// <summary>
+    /// Blazor retire un attribut dont la valeur booleenne vaut false : rendu
+    /// depuis un bool, aria-pressed disparaissait du DOM des que le son etait
+    /// coupe, et le bouton cessait d'etre annonce comme une bascule.
+    /// </summary>
+    private string SoundPressed => Audio.IsMuted ? "false" : "true";
+
+    /// <summary>
+    /// Le reglage vit dans le navigateur, pas dans le composant : il faut donc
+    /// un rendu de plus une fois l'etat relu, sinon l'icone annonce le son actif
+    /// alors qu'il a ete coupe a la visite precedente.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        await Audio.PrimeAsync();
+        StateHasChanged();
+    }
+
+    private async Task ToggleSoundAsync()
+    {
+        await Audio.ToggleMuteAsync();
+
+        if (!Audio.IsMuted)
+        {
+            Audio.Play("bubble");
+        }
+    }
+}

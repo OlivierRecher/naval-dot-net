@@ -3,10 +3,14 @@
 @using BattleShip.Models
 @implements IDisposable
 @inject GameSession Session
+@inject OceanAudio Audio
 
 <PageTitle>Bataille navale</PageTitle>
 
-<h1 class="mb-3">Bataille navale</h1>
+<header class="hero">
+    <h1>Bataille navale</h1>
+    <p class="tagline">Sondez les fonds, repérez la flotte adverse — et coulez-la avant qu'elle ne vous trouve.</p>
+</header>
 
 @if (Session.Failure is not null)
 {
@@ -21,7 +25,7 @@
 
 @if (Session.View is null)
 {
-    <div class="card p-3 setup">
+    <div class="card p-4 setup">
         <h2 class="h5">Nouvelle partie</h2>
 
         <label class="form-label" for="mode">Adversaire</label>
@@ -61,10 +65,10 @@
         }
 
         <label class="form-label">Composition de la flotte</label>
-        <ul class="fleet mb-1">
+        <ul class="fleet fleet-picker mb-1">
             @foreach (var ship in ShipCatalog.All)
             {
-                <li class="d-flex align-items-center gap-2 mb-1">
+                <li>
                     <button type="button" class="btn btn-sm btn-outline-secondary"
                             aria-label="Retirer un @ship.Label"
                             disabled="@(_fleet.GetValueOrDefault(ship.Name) is 0)"
@@ -73,7 +77,14 @@
                     <button type="button" class="btn btn-sm btn-outline-secondary"
                             aria-label="Ajouter un @ship.Label"
                             @onclick="() => Adjust(ship.Name, 1)">+</button>
-                    <span>@ship.Label — @ship.Size case@(ship.Size > 1 ? "s" : "")</span>
+                    <span class="hull">@ship.Label</span>
+                    <span class="pips" aria-hidden="true">
+                        @for (var pip = 0; pip < ship.Size; pip++)
+                        {
+                            <span class="pip"></span>
+                        }
+                    </span>
+                    <span class="count">@ship.Size case@(ship.Size > 1 ? "s" : "")</span>
                 </li>
             }
         </ul>
@@ -85,7 +96,7 @@
         {
             <p class="form-text text-danger">@problem</p>
         }
-        <button type="button" class="btn btn-sm btn-outline-secondary mb-3" @onclick="ResetFleet">
+        <button type="button" class="btn btn-sm btn-outline-secondary mb-3 align-self-start" @onclick="ResetFleet">
             Revenir à la flotte classique
         </button>
 
@@ -95,14 +106,20 @@
             <option value="Manual">Manuel — vous posez chaque navire</option>
         </select>
 
-        <button class="btn btn-primary" @onclick="StartAsync" disabled="@(Session.IsBusy || SetupProblem is not null)">
-            @(Session.IsBusy ? "Création…" : "Lancer la partie")
+        <button class="btn btn-primary btn-lg dive" @onclick="StartAsync" disabled="@(Session.IsBusy || SetupProblem is not null)">
+            @(Session.IsBusy ? "Immersion…" : "Larguer les amarres")
         </button>
     </div>
 }
 else if (Session.IsAwaitingHandover)
 {
-    <div class="card p-4 setup text-center">
+    <div class="card p-4 setup handover text-center">
+        <svg class="periscope" viewBox="0 0 80 80" aria-hidden="true">
+            <circle class="lens" cx="40" cy="40" r="30" />
+            <path class="reticle" d="M40 14v52M14 40h52" />
+            <circle class="iris" cx="40" cy="40" r="11" />
+        </svg>
+
         <h2 class="h4">Passez l'appareil</h2>
         <p class="lead mb-1">Au tour de <strong>@Session.HandoverTo</strong>.</p>
         @if (Session.Notice is not null)
@@ -140,11 +157,19 @@ else if (Session.IsPlacingFleet)
     </div>
 
     <div class="boards">
-        <section>
+        <section class="board">
             <h2 class="h6">Votre grille</h2>
-            <div class="grid" style="--columns: @Session.View.Columns">
+            <div class="grid" style="--columns: @Session.View.Columns" @onmouseleave="ClearHover">
+                <span class="axis corner" aria-hidden="true"></span>
+                @for (var column = 0; column < Session.View.Columns; column++)
+                {
+                    <span class="axis" aria-hidden="true">@((char)('A' + column))</span>
+                }
+
                 @for (var row = 0; row < Session.View.Rows; row++)
                 {
+                    <span class="axis" aria-hidden="true">@(row + 1)</span>
+
                     for (var column = 0; column < Session.View.Columns; column++)
                     {
                         // `column` et `row` sont les variables de la boucle for : les
@@ -153,10 +178,11 @@ else if (Session.IsPlacingFleet)
                         var cell = new CoordinatesDto(column, row);
 
                         <button type="button"
-                                class="cell @(_takenCells.Contains(cell) ? "cell-ship" : "cell-empty")"
+                                class="cell @(_takenCells.Contains(cell) ? "cell-ship" : "cell-empty") @PreviewClass(cell)"
                                 disabled="@(Session.IsBusy || NextShip is null)"
                                 title="@PlacementCellLabel(cell)"
                                 aria-label="@PlacementCellLabel(cell)"
+                                @onmouseover="() => Hover(cell)"
                                 @onclick="() => PlaceAt(cell)">
                         </button>
                     }
@@ -164,48 +190,64 @@ else if (Session.IsPlacingFleet)
             </div>
         </section>
 
-        <section>
+        <section class="board">
             <h2 class="h6">Flotte à poser</h2>
 
             @if (NextShip is { } next)
             {
-                <p>Navire courant : <strong>@ShipCatalog.LabelOf(next.Kind)</strong> — @next.Size case@(next.Size > 1 ? "s" : "").</p>
+                <p class="current">
+                    Navire courant : <strong>@ShipCatalog.LabelOf(next.Kind)</strong>
+                    <span class="pips" aria-hidden="true">
+                        @for (var pip = 0; pip < next.Size; pip++)
+                        {
+                            <span class="pip"></span>
+                        }
+                    </span>
+                    — @next.Size case@(next.Size > 1 ? "s" : "").
+                </p>
 
                 <div class="btn-group mb-3" role="group">
                     <button type="button"
                             class="btn btn-sm @(_orientation == OrientationNames.Horizontal ? "btn-primary" : "btn-outline-primary")"
-                            @onclick="() => _orientation = OrientationNames.Horizontal">Horizontal</button>
+                            @onclick="() => Turn(OrientationNames.Horizontal)">Horizontal</button>
                     <button type="button"
                             class="btn btn-sm @(_orientation == OrientationNames.Vertical ? "btn-primary" : "btn-outline-primary")"
-                            @onclick="() => _orientation = OrientationNames.Vertical">Vertical</button>
+                            @onclick="() => Turn(OrientationNames.Vertical)">Vertical</button>
                 </div>
 
                 <p class="form-text">Cliquez la case de départ : elle sera l'extrémité haute ou gauche du navire.</p>
             }
             else
             {
-                <p>Tous les navires sont posés.</p>
+                <p class="current">Tous les navires sont posés.</p>
             }
 
             <ul class="fleet">
                 @foreach (var ship in Session.View.FleetToPlace.Select((ship, index) => (ship, index)))
                 {
-                    <li class="@(ship.index < _placed.Count ? "sunk" : null)">
-                        @ShipCatalog.LabelOf(ship.ship.Kind) — @ship.ship.Size case@(ship.ship.Size > 1 ? "s" : "")
+                    <li class="@(ship.index < _placed.Count ? "done" : null)">
+                        <span class="hull">@ShipCatalog.LabelOf(ship.ship.Kind)</span>
+                        <span class="pips" aria-hidden="true">
+                            @for (var pip = 0; pip < ship.ship.Size; pip++)
+                            {
+                                <span class="pip @(ship.index < _placed.Count ? "pip-set" : null)"></span>
+                            }
+                        </span>
+                        <span class="count">@ship.ship.Size case@(ship.ship.Size > 1 ? "s" : "")</span>
                     </li>
                 }
             </ul>
 
-            <div class="mt-3">
+            <div class="mt-3 d-flex flex-wrap gap-2">
                 <button class="btn btn-primary"
                         disabled="@(NextShip is not null || Session.IsBusy)"
                         @onclick="ConfirmFleetAsync">
                     @(Session.IsBusy ? "Envoi…" : "Valider la flotte")
                 </button>
-                <button class="btn btn-outline-secondary ms-2" disabled="@(_placed.Count is 0)" @onclick="UndoLastShip">
+                <button class="btn btn-outline-secondary" disabled="@(_placed.Count is 0)" @onclick="UndoLastShip">
                     Retirer le dernier
                 </button>
-                <button class="btn btn-outline-secondary ms-2" disabled="@(_placed.Count is 0)" @onclick="ClearFleet">
+                <button class="btn btn-outline-secondary" disabled="@(_placed.Count is 0)" @onclick="ClearFleet">
                     Tout effacer
                 </button>
             </div>
@@ -216,13 +258,15 @@ else if (Session.IsPlacingFleet)
 }
 else
 {
-    <div class="status alert @(Session.IsOver ? "alert-success" : "alert-secondary")" role="status">
+    <div class="status alert @(Session.IsOver ? "alert-success" : "alert-secondary") @(Session.IsOver ? "finale" : null)" role="status">
         @if (Session.IsOver)
         {
+            <span class="flag" aria-hidden="true">@(Session.View.Winner == Session.View.ViewerName ? "🏆" : "🌊")</span>
             <strong>Partie terminée — @(Session.View.Winner) l'emporte.</strong>
         }
         else
         {
+            <span class="sonar @(Session.View.IsViewerTurn ? "ready" : "waiting")" aria-hidden="true"></span>
             <strong>@(Session.View.IsViewerTurn ? $"Au tour de {Session.View.ViewerName}." : "Le bot joue…")</strong>
             @if (!Session.IsHotSeat)
             {
@@ -236,18 +280,26 @@ else
     </div>
 
     <div class="boards">
-        <section>
+        <section class="board">
             <h2 class="h6">Grille adverse</h2>
-            <div class="grid" style="--columns: @Session.View.Columns">
+            <div class="grid hunting" style="--columns: @Session.View.Columns">
+                <span class="axis corner" aria-hidden="true"></span>
+                @for (var column = 0; column < Session.View.Columns; column++)
+                {
+                    <span class="axis" aria-hidden="true">@((char)('A' + column))</span>
+                }
+
                 @for (var row = 0; row < Session.View.Rows; row++)
                 {
+                    <span class="axis" aria-hidden="true">@(row + 1)</span>
+
                     for (var column = 0; column < Session.View.Columns; column++)
                     {
                         var target = new CoordinatesDto(column, row);
                         var known = _fired.GetValueOrDefault(target);
 
                         <button type="button"
-                                class="cell @EnemyCellClass(known)"
+                                class="cell @EnemyCellClass(known) @(_justRevealed.Contains(target) ? "cell-fresh" : null)"
                                 disabled="@(!Session.CanFire || known is not null)"
                                 title="@EnemyCellLabel(target, known)"
                                 aria-label="@EnemyCellLabel(target, known)"
@@ -258,15 +310,23 @@ else
             </div>
         </section>
 
-        <section>
+        <section class="board">
             <h2 class="h6">Votre flotte</h2>
             <div class="grid" style="--columns: @Session.View.Columns">
+                <span class="axis corner" aria-hidden="true"></span>
+                @for (var column = 0; column < Session.View.Columns; column++)
+                {
+                    <span class="axis" aria-hidden="true">@((char)('A' + column))</span>
+                }
+
                 @for (var row = 0; row < Session.View.Rows; row++)
                 {
+                    <span class="axis" aria-hidden="true">@(row + 1)</span>
+
                     for (var column = 0; column < Session.View.Columns; column++)
                     {
                         var cell = new CoordinatesDto(column, row);
-                        <div class="cell @OwnCellClass(cell)"
+                        <div class="cell @OwnCellClass(cell) @(_justStruck.Contains(cell) ? "cell-fresh" : null)"
                              title="@OwnCellLabel(cell)"
                              role="img"
                              aria-label="@OwnCellLabel(cell)"></div>
@@ -278,7 +338,14 @@ else
                 @foreach (var ship in Session.View.OwnFleet)
                 {
                     <li class="@(ship.IsSunk ? "sunk" : null)">
-                        @ShipCatalog.LabelOf(ship.Kind) — @ship.Hits.Count / @ship.Cells.Count
+                        <span class="hull">@ShipCatalog.LabelOf(ship.Kind)</span>
+                        <span class="pips" aria-hidden="true">
+                            @for (var pip = 0; pip < ship.Cells.Count; pip++)
+                            {
+                                <span class="pip @(pip < ship.Hits.Count ? "pip-hit" : null)"></span>
+                            }
+                        </span>
+                        <span class="count">@ship.Hits.Count / @ship.Cells.Count</span>
                     </li>
                 }
             </ul>
@@ -306,7 +373,7 @@ else
     }
     else if (Session.View.ShotsFired.Count is 0)
     {
-        <p class="form-text">Tirez une fois pour pouvoir rejouer ce tir et voir le refus du serveur.</p>
+        <p class="form-text hint">Tirez une fois pour pouvoir rejouer ce tir et voir le refus du serveur.</p>
     }
 }
 
@@ -357,10 +424,17 @@ else
         _ => null
     };
 
-    private void Adjust(string kind, int delta) =>
+    private void Adjust(string kind, int delta)
+    {
         _fleet[kind] = Math.Max(0, _fleet.GetValueOrDefault(kind) + delta);
+        Audio.Play("tap");
+    }
 
-    private void ResetFleet() => _fleet = ClassicFleet();
+    private void ResetFleet()
+    {
+        _fleet = ClassicFleet();
+        Audio.Play("tap");
+    }
 
     private List<string> FleetAsNames() =>
         [.. _fleet.SelectMany(entry => Enumerable.Repeat(entry.Key, entry.Value))];
@@ -373,6 +447,55 @@ else
         Session.View is { } view && _placed.Count < view.FleetToPlace.Count
             ? view.FleetToPlace[_placed.Count]
             : null;
+
+    private CoordinatesDto? _hover;
+    private HashSet<CoordinatesDto> _preview = [];
+    private bool _previewFits;
+
+    /// <summary>
+    /// L'empreinte du navire courant sous le curseur. Elle répond à la seule
+    /// question que le joueur se pose avant de cliquer — « est-ce que ça
+    /// tient ? » — avec la même règle que <see cref="PlaceAt"/>, pour ne pas
+    /// annoncer une pose que le clic refuserait.
+    /// </summary>
+    private string? PreviewClass(CoordinatesDto cell) => _preview.Contains(cell)
+        ? _previewFits ? "cell-preview" : "cell-blocked"
+        : null;
+
+    private void Hover(CoordinatesDto cell)
+    {
+        _hover = cell;
+        RecomputePreview();
+    }
+
+    private void ClearHover()
+    {
+        _hover = null;
+        _preview = [];
+    }
+
+    private void Turn(string orientation)
+    {
+        _orientation = orientation;
+        RecomputePreview();
+        Audio.Play("tap");
+    }
+
+    private void RecomputePreview()
+    {
+        if (Session.View is not { } view || NextShip is not { } ship || _hover is not { } origin)
+        {
+            _preview = [];
+            return;
+        }
+
+        var cells = CellsOf(origin.Column, origin.Row, ship.Size, _orientation);
+
+        _previewFits = cells.All(cell => cell.Column < view.Columns && cell.Row < view.Rows)
+            && !cells.Any(_takenCells.Contains);
+
+        _preview = [.. cells.Where(cell => cell.Column < view.Columns && cell.Row < view.Rows)];
+    }
 
     /// <summary>
     /// Refuse localement ce que le serveur refuserait, pour éviter un
@@ -396,6 +519,8 @@ else
 
         _placed.Add(new ShipPlacementDto(ship.Kind, origin.Column, origin.Row, _orientation));
         RecomputeTakenCells();
+        RecomputePreview();
+        Audio.Play("drop");
     }
 
     private static List<CoordinatesDto> CellsOf(int column, int row, int size, string orientation) =>
@@ -414,12 +539,15 @@ else
     {
         _placed.RemoveAt(_placed.Count - 1);
         RecomputeTakenCells();
+        RecomputePreview();
+        Audio.Play("bubble");
     }
 
     private void ClearFleet()
     {
         _placed.Clear();
         RecomputeTakenCells();
+        _preview = [];
     }
 
     private async Task ConfirmFleetAsync() => await Session.PlaceFleetAsync(_placed);
@@ -431,6 +559,15 @@ else
     private HashSet<CoordinatesDto> _sunkCells = [];
     private HashSet<CoordinatesDto> _incoming = [];
 
+    private readonly HashSet<CoordinatesDto> _justRevealed = [];
+    private readonly HashSet<CoordinatesDto> _justStruck = [];
+    private Guid _watchedGame;
+    private string? _watchedViewer;
+    private bool _watchedOver;
+
+    /// <summary>Au-delà, le bot enchaîne et les voix se superposent en bouillie.</summary>
+    private const int MaxVoices = 4;
+
     /// <summary>
     /// La session est Scoped : elle survit au composant, qui est reconstruit à
     /// chaque retour sur la page. S'abonner ne suffit donc pas — sans cette
@@ -441,6 +578,14 @@ else
     {
         Project();
         Session.OnChange += Refresh;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Audio.PrimeAsync();
+        }
     }
 
     public void Dispose() => Session.OnChange -= Refresh;
@@ -462,19 +607,113 @@ else
             _ownHitCells = [];
             _sunkCells = [];
             _incoming = [];
+            _justRevealed.Clear();
+            _justStruck.Clear();
+            _watchedGame = Guid.Empty;
+            _watchedViewer = null;
+            _watchedOver = false;
             return;
         }
+
+        var seenShots = _fired;
+        var seenDamage = _ownHitCells;
+        var seenSplashes = _incoming;
 
         _fired = view.ShotsFired.ToDictionary(shot => shot.Target, shot => shot.Result);
         _ownShipCells = [.. view.OwnFleet.SelectMany(ship => ship.Cells)];
         _ownHitCells = [.. view.OwnFleet.SelectMany(ship => ship.Hits)];
         _sunkCells = [.. view.OwnFleet.Where(ship => ship.IsSunk).SelectMany(ship => ship.Cells)];
         _incoming = [.. view.ShotsReceived];
+
+        _justRevealed.Clear();
+        _justStruck.Clear();
+
+        // En hot-seat la vue change de propriétaire : tout y est « nouveau »
+        // sans qu'aucun tir n'ait eu lieu. Comparer deux vues qui n'ont ni la
+        // même partie ni le même viewer rejouerait la partie entière en sons.
+        var sameEyes = view.GameId == _watchedGame && view.ViewerName == _watchedViewer;
+        var wasOver = _watchedOver;
+
+        _watchedGame = view.GameId;
+        _watchedViewer = view.ViewerName;
+        _watchedOver = Session.IsOver;
+
+        if (!sameEyes || Session.IsAwaitingHandover)
+        {
+            return;
+        }
+
+        foreach (var shot in view.ShotsFired)
+        {
+            if (!seenShots.ContainsKey(shot.Target))
+            {
+                _justRevealed.Add(shot.Target);
+            }
+        }
+
+        foreach (var cell in _incoming.Where(cell => !seenSplashes.Contains(cell))
+            .Concat(_ownHitCells.Where(cell => !seenDamage.Contains(cell))))
+        {
+            _justStruck.Add(cell);
+        }
+
+        Announce(view, wasOver);
     }
+
+    /// <summary>
+    /// Les tirs arrivent par paquets — un enchaînement du bot tient dans un
+    /// seul rafraîchissement. Les voix sont donc étalées dans le temps, dans
+    /// l'ordre du journal, pour qu'on entende une salve et non un accord.
+    /// </summary>
+    private void Announce(GameViewResponse view, bool wasOver)
+    {
+        var delay = 0.0;
+        var voices = 0;
+
+        foreach (var shot in view.ShotsFired.Where(shot => _justRevealed.Contains(shot.Target)))
+        {
+            if (voices++ >= MaxVoices)
+            {
+                break;
+            }
+
+            Audio.Play(VoiceOf(shot.Result), delay);
+            delay += 0.3;
+        }
+
+        foreach (var cell in _justStruck)
+        {
+            if (voices++ >= MaxVoices)
+            {
+                break;
+            }
+
+            Audio.Play(IncomingVoice(cell), delay);
+            delay += 0.3;
+        }
+
+        if (Session.IsOver && !wasOver)
+        {
+            Audio.Play(view.Winner == view.ViewerName ? "win" : "lose", delay + 0.4);
+        }
+    }
+
+    private static string VoiceOf(string result) => result switch
+    {
+        ShotResultNames.Hit => "hit",
+        ShotResultNames.Sunk => "sunk",
+        _ => "miss"
+    };
+
+    private string IncomingVoice(CoordinatesDto cell) =>
+        _sunkCells.Contains(cell) ? "sunk"
+        : _ownHitCells.Contains(cell) ? "hit"
+        : "miss";
 
     private async Task StartAsync()
     {
         ClearFleet();
+        Audio.Play("dive");
         await Session.StartAsync(_playerName, _side, _mode, _botDifficulty, _fleetPlacement,
             _mode == GameModeNames.Local ? _opponentName : null, FleetAsNames());
     }
@@ -483,6 +722,7 @@ else
     private void ConfirmHandover()
     {
         ClearFleet();
+        Audio.Play("bubble");
         Session.ConfirmHandover();
     }
 
@@ -492,12 +732,17 @@ else
 
     private async Task RetryBotTurnAsync() => await Session.RetryBotTurnAsync();
 
-    private async Task DemonstrateGrpcRefusalAsync() => await Session.DemonstrateGrpcRefusalAsync();
+    private async Task DemonstrateGrpcRefusalAsync()
+    {
+        Audio.Play("tap");
+        await Session.DemonstrateGrpcRefusalAsync();
+    }
 
     private void Reset()
     {
         Session.Forget();
         ClearFleet();
+        ClearHover();
         Project();
     }
 

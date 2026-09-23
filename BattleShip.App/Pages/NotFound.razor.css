@@ -1,0 +1,6 @@
+.adrift {
+    max-width: 34rem;
+    color: rgba(255, 255, 255, 0.88);
+    font-weight: 600;
+    text-shadow: 0 1px 3px rgba(3, 25, 45, 0.6);
+}

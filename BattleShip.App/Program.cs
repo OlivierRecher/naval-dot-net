@@ -27,5 +27,6 @@ builder.Services.AddScoped(_ =>
 });
 
 builder.Services.AddScoped<GameSession>();
+builder.Services.AddScoped<OceanAudio>();
 
 await builder.Build().RunAsync();
